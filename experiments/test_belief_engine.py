@@ -5,13 +5,10 @@ from src.simulator import Action, Cause
 
 
 def test_rerun_passed_matches_worked_example():
-    beliefs = initial_beliefs()
     posterior = posterior_after_observation(
-        beliefs, Action.RERUN, positive=True
+        initial_beliefs(), Action.RERUN, positive=True
     )
 
-    # P(RERUN=PASSED | cause) comes from the likelihood assumptions
-    # recorded in src/simulator.py.
     expected = {
         Cause.CODE_REGRESSION: 0.3478260870,
         Cause.FLAKY_TEST: 0.5217391304,
@@ -24,7 +21,8 @@ def test_rerun_passed_matches_worked_example():
     for cause, value in expected.items():
         assert isclose(posterior[cause], value, rel_tol=1e-9, abs_tol=1e-9)
 
-    assert isclose(entropy(posterior), 1.7345, rel_tol=1e-3)
+    # Exact entropy for the posterior above is approximately 1.58792935 bits.
+    assert isclose(entropy(posterior), 1.58792935, rel_tol=1e-7, abs_tol=1e-7)
 
 
 if __name__ == "__main__":
