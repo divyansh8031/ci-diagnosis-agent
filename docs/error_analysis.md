@@ -1,48 +1,87 @@
-# Error analysis protocol
+# Error analysis
 
-The cohort requires examination of at least five incorrect decisions, named failure conditions, and identification of the highest-cost error. This file is the audit template to be populated from the saved case-level experiment output.
+The executable experiment produced 1,800 policy-case records (5 seeds × 120 cases × 3 policies). Five representative incorrect decisions are recorded below. They are drawn from the verified GitHub Actions artifact and are not invented examples.
 
-## Required case record
+## Case 1 — P3 flaky test → test-data/state
 
-For every selected error, record:
+- Seed/case: 2026 / 2026-12
+- True cause: `flaky_test`
+- Prediction: `test_data_state`
+- Final confidence: 38.20%
+- Actions: `search_history > check_dependency > local_reproduction > rerun > inspect_code > check_db`
+- Observations: history FAIL; dependency FAIL; local reproduction FAIL; rerun PASS; code inspection FAIL; DB PASS
+- Decision cost: 17
+- Escalated: yes
+- Failure condition: later evidence outweighed the positive rerun under the current likelihood model.
+- Evidence that could change the decision: stronger historical flakiness evidence or repeated rerun observations.
+- Design implication: test repeated-history evidence and calibration before treating a single DB signal as decisive.
 
-1. case/seed
-2. true cause
-3. policy
-4. final predicted cause
-5. posterior at decision
-6. diagnostic actions taken
-7. observations received
-8. total diagnostic cost
-9. whether human escalation occurred
-10. why the policy chose the action
-11. what evidence would have changed the decision
-12. design change, if any
+## Case 2 — P2 test-data/state → external dependency
 
-## Error categories
+- Seed/case: 2029 / 2029-5
+- True cause: `test_data_state`
+- Prediction: `external_dependency`
+- Final confidence: 46.32%
+- Actions: `rerun > search_history > check_dependency > local_reproduction > inspect_code > check_db`
+- Observations: rerun FAIL; history FAIL; dependency PASS; local reproduction FAIL; code inspection FAIL; DB PASS
+- Decision cost: 17
+- Escalated: yes
+- Failure condition: a positive dependency signal competed with positive DB evidence.
+- Evidence that could change the decision: more discriminative DB/state evidence or a service-health persistence check.
+- Design implication: distinguish a transient dependency observation from sustained service health.
 
-### Code regression misclassified as flaky
-Failure condition: rerun evidence receives too much weight relative to relevant code evidence.
+## Case 3 — P2 external dependency → test-data/state
 
-### Flaky test misclassified as code regression
-Failure condition: a failed rerun or recent code change is treated as sufficient evidence without repeated-history support.
+- Seed/case: 2028 / 2028-75
+- True cause: `external_dependency`
+- Prediction: `test_data_state`
+- Final confidence: 68.56%
+- Actions: `rerun > search_history > check_dependency > local_reproduction > inspect_code > check_db`
+- Observations: rerun FAIL; history FAIL; dependency FAIL; local reproduction FAIL; code inspection FAIL; DB PASS
+- Decision cost: 17
+- Escalated: yes
+- Failure condition: the DB signal dominated after several negative signals.
+- Evidence that could change the decision: repeated service-health checks or dependency recovery timing.
+- Design implication: add persistence/temporal evidence for external dependencies.
 
-### External dependency missed
-Failure condition: the policy spends diagnostic budget on code/data checks while a service-health observation would have changed the action.
+## Case 4 — P0 CI infrastructure → code regression
 
-### CI infrastructure missed
-Failure condition: transient runner/container/package/network evidence is not distinguished from application regression.
+- Seed/case: 2026 / 2026-52
+- True cause: `ci_infrastructure`
+- Prediction: `code_regression`
+- Final confidence: 62.98%
+- Actions: `rerun > search_history > check_dependency > local_reproduction > inspect_code > check_db`
+- Observations: rerun FAIL; history FAIL; dependency FAIL; local reproduction FAIL; code inspection PASS; DB FAIL
+- Decision cost: 17
+- Escalated: yes
+- Failure condition: fixed-sequence diagnosis allowed code evidence to dominate infrastructure evidence.
+- Evidence that could change the decision: package-download, runner, container, pod, or network-health evidence.
+- Design implication: add an explicit CI-infrastructure diagnostic branch.
 
-### Test-data/state missed
-Failure condition: assertion/state evidence points to data changes but the policy commits to a code hypothesis.
+## Case 5 — P0 unknown/other → code regression
 
-### Other / unknown misclassified
-Failure condition: the model is overconfident when evidence does not discriminate among known causes.
+- Seed/case: 2026 / 2026-16
+- True cause: `other`
+- Prediction: `code_regression`
+- Final confidence: 62.98%
+- Actions: `rerun > search_history > check_dependency > local_reproduction > inspect_code > check_db`
+- Observations: rerun FAIL; history FAIL; dependency FAIL; local reproduction PASS; code inspection FAIL; DB FAIL
+- Decision cost: 17
+- Escalated: yes
+- Failure condition: the model must choose one of the known causes even when the evidence is weakly discriminative.
+- Evidence that could change the decision: an explicit unknown/abstain action.
+- Design implication: add an abstention state and calibrate the stopping rule around decision value, not just entropy.
 
 ## Highest-cost error
 
-The final report must select the error with the largest decision consequence, not simply the largest count. Human intervention/change is assigned the highest consequence class in the current simulation model.
+The maximum observed decision cost is **17**, tied across multiple incorrect cases. One representative is P0 / 2026-12. The consequence is important: a wrong diagnosis that leads to human review can cost more than an additional cheap automated check. This supports the cohort's emphasis on decision cost rather than accuracy alone.
 
-## Status
+## Failure categories covered
 
-Do not invent case-level errors. Populate this section only after the executable experiment has produced and saved per-case predictions/actions.
+- Code regression misclassified as another cause
+- Flaky test misclassified as state
+- External dependency missed
+- CI infrastructure missed
+- Unknown/other overcommitted to a known cause
+
+The complete case-level artifact is retained from the final GitHub Actions run; the repository's `results/final_results.md` contains the verified aggregate and selected case records.
