@@ -1,0 +1,25 @@
+name: CI diagnosis experiment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run simulator sanity checks
+        run: |
+          python experiments/test_simulator.py
+          python experiments/test_belief_engine.py
+          python experiments/test_failed_rerun.py
+          python experiments/test_information_gain.py
+      - name: Run shared-case experiment
+        run: python experiments/shared_case_experiment.py
+      - name: Run sensitivity analysis
+        run: python experiments/sensitivity_analysis.py
