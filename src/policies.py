@@ -20,9 +20,6 @@ CAUSE_RESPONSES = {
     Cause.OTHER: "human_escalation",
 }
 
-# Operational commitment threshold used by both adaptive policies. It is a
-# v0.1 parameter and must be stress-tested/tuned in the final experiment;
-# it is not claimed to be an empirical universal threshold.
 P2_THRESHOLD = 0.70
 P3_THRESHOLD = P2_THRESHOLD
 
@@ -37,9 +34,7 @@ P2_ACTION_ORDER = [
 
 
 def update_state(state: PolicyState, action: Action, positive: bool):
-    state.beliefs = posterior_after_observation(
-        state.beliefs, action, positive
-    )
+    state.beliefs = posterior_after_observation(state.beliefs, action, positive)
     state.actions_taken.append(action)
     state.diagnostic_cost += ACTION_COSTS[action]
     return state
@@ -54,55 +49,39 @@ def _terminal(cause, confidence):
     }
 
 
-def p2_decision(state: PolicyState):
+def p2_decision(state: PolicyState, threshold=None):
+    """Evidence-driven policy with an explicit, configurable threshold."""
+    threshold = P2_THRESHOLD if threshold is None else threshold
     cause = most_likely_cause(state.beliefs)
     confidence = state.beliefs[cause]
 
-    if confidence >= P2_THRESHOLD:
+    if confidence >= threshold:
         return _terminal(cause, confidence)
 
     for action in P2_ACTION_ORDER:
         if action not in state.actions_taken:
-            return {
-                "type": "diagnostic",
-                "action": action,
-                "cause": cause,
-                "confidence": confidence,
-            }
+            return {"type": "diagnostic", "action": action,
+                    "cause": cause, "confidence": confidence}
 
     return _terminal(cause, confidence)
 
 
-def p3_decision(state: PolicyState):
-    """Choose the unused action with maximum EIG per diagnostic cost.
-
-    P3 uses the same explicit commitment threshold as P2 so the comparison
-    isolates the value of adaptive action selection rather than silently
-    changing the stopping criterion.
-    """
+def p3_decision(state: PolicyState, threshold=None):
+    """Adaptive policy: maximize expected information gain per unit cost."""
+    threshold = P3_THRESHOLD if threshold is None else threshold
     cause = most_likely_cause(state.beliefs)
     confidence = state.beliefs[cause]
 
-    if confidence >= P3_THRESHOLD:
+    if confidence >= threshold:
         return _terminal(cause, confidence)
 
-    candidates = [
-        action for action in Action if action not in state.actions_taken
-    ]
+    candidates = [a for a in Action if a not in state.actions_taken]
     if not candidates:
         return _terminal(cause, confidence)
 
-    scores = {
-        action: information_gain(state.beliefs, action) / ACTION_COSTS[action]
-        for action in candidates
-    }
+    scores = {a: information_gain(state.beliefs, a) / ACTION_COSTS[a]
+              for a in candidates}
     best_action = max(scores, key=scores.get)
-
-    return {
-        "type": "diagnostic",
-        "action": best_action,
-        "score": scores[best_action],
-        "cause": cause,
-        "confidence": confidence,
-        "scores": scores,
-    }
+    return {"type": "diagnostic", "action": best_action,
+            "score": scores[best_action], "cause": cause,
+            "confidence": confidence, "scores": scores}
