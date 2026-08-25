@@ -1,0 +1,23 @@
+digraph CIDiagnosisAgent {
+  rankdir=TB;
+  node [shape=box];
+
+  CI [label="CI failure\nlogs + test + commit"];
+  Evidence [label="Evidence store\nsource + observation + audit trail"];
+  Belief [label="Belief state\ncompeting hypotheses"];
+  Action [label="Select diagnostic action"];
+  Feedback [label="Tool feedback\nPASS/FAIL, diff, health, DB, history"];
+  Stop [shape=diamond, label="Stop rule /\ncommit threshold?"];
+  Human [label="Human review / escalation"];
+  Response [label="Cause-specific recommendation"];
+
+  CI -> Evidence;
+  Evidence -> Belief;
+  Belief -> Action;
+  Action -> Feedback;
+  Feedback -> Evidence;
+  Belief -> Stop;
+  Stop -> Action [label="no"];
+  Stop -> Response [label="yes"];
+  Response -> Human [label="when intervention/review required"];
+}
