@@ -1,0 +1,33 @@
+name: Final CI diagnosis evidence
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run validation
+        run: |
+          python experiments/test_simulator.py
+          python experiments/test_belief_engine.py
+          python experiments/test_failed_rerun.py
+          python experiments/test_information_gain.py
+      - name: Run experiment and generate evidence
+        run: |
+          python experiments/shared_case_experiment.py
+          python experiments/sensitivity_analysis.py
+          python experiments/generate_report.py
+      - name: Upload final evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnosis-final-evidence
+          path: results/generated/
