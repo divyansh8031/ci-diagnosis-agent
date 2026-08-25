@@ -6,17 +6,17 @@
 
 \title{Cost-Aware Sequential Diagnosis of CI Integration-Test Failures}
 \author{Divyansh Sharma}
-\date{Week 1 working preprint}
+\date{Week 1 preprint}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We study a small decision-making agent for diagnosing integration-test failures in continuous integration (CI). The agent treats the true failure cause as hidden, maintains competing beliefs, selects diagnostic actions, updates beliefs after observations, and escalates when evidence is insufficient or intervention is required. The prototype compares a fixed baseline (P0), a threshold policy (P2), and an information-value policy (P3) in a reproducible simulated environment. The simulation uses explicit priors, qualitative-to-numerical likelihood assumptions, and relative diagnostic costs. Results are interpreted as simulation evidence rather than real-world failure frequencies. In particular, P3 is evaluated as an efficiency/accuracy trade-off rather than assumed to dominate the threshold policy.
+We study a small decision-making agent for diagnosing integration-test failures in continuous integration (CI). The agent treats the true failure cause as hidden, maintains competing beliefs, selects diagnostic actions, updates beliefs after observations, and escalates when evidence is insufficient or intervention is required. The prototype compares a fixed baseline (P0), a threshold policy (P2), and an information-value policy (P3) in a reproducible simulated environment. Across five fixed seeds and 120 cases per seed, P3 reduced diagnostic effort relative to P0 while retaining competitive accuracy, but it did not universally dominate P2 across commitment thresholds. The results are simulation evidence under explicit assumptions, not estimates of real-world CI failure frequencies.
 \end{abstract}
 
 \section{Problem}
-CI failures can have multiple plausible causes: code regression, flaky tests, external dependencies, CI infrastructure, test-data/state, or an unknown/other category. A useful diagnostic agent should choose the next information-gathering action rather than immediately asserting a root cause. The research notes explicitly distinguish observations from hidden causes and emphasize traceable belief updates and human escalation.
+CI failures can have multiple plausible causes: code regression, flaky tests, external dependencies, CI infrastructure, test-data/state, or an unknown/other category. A useful diagnostic agent should choose the next information-gathering action rather than immediately asserting a root cause. The research framing distinguishes observations from hidden causes and emphasizes traceable belief updates and human escalation.
 
 \section{Research framing}
 The prototype follows the loop
@@ -41,42 +41,58 @@ Other & 0.05\\
 \bottomrule
 \end{tabular}
 \end{center}
-These are model assumptions, not measured population frequencies. Qualitative evidence assumptions are mapped to 0.8 (often), 0.4 (sometimes), and 0.1 (rarely). Bayesian updating is used to make the decision record explicit and reproducible.
+These are model assumptions, not measured population frequencies. Qualitative evidence assumptions are mapped to 0.8 (often), 0.4 (sometimes), and 0.1 (rarely). Bayesian updating makes the decision record explicit and reproducible.
 
-For example, after \texttt{RERUN=PASSED}, the current model gives approximately 52.17\% probability to the flaky-test hypothesis and 34.78\% to code regression. After \texttt{RERUN=FAILED}, the corresponding values are approximately 11.11\% and 44.44\%, respectively. A rerun therefore changes belief; it does not prove a root cause.
+After \texttt{RERUN=PASSED}, the model gives approximately 52.17\% probability to the flaky-test hypothesis and 34.78\% to code regression. After \texttt{RERUN=FAILED}, the corresponding values are approximately 11.11\% and 44.44\%. A rerun changes belief; it does not prove a root cause.
 
 \section{Costs and stopping}
-The simulator uses relative diagnostic costs of 1 for cheap automated checks and 2 for heavier diagnostics. Human review and human intervention are represented by consequence classes of 8 and 9. These numbers are controlled simulation assumptions. The cohort framing requires the headline metric to be decision cost and emphasizes stopping when further information cannot change the action.
+The simulator uses relative diagnostic costs of 1 for cheap automated checks and 2 for heavier diagnostics. Human review/intervention are represented by consequence classes of 8 and 9. These numbers are controlled simulation assumptions. Decision cost is treated as diagnostic cost plus the applicable simulated consequence class. The design also recognizes that information is valuable only when it can change the eventual action.
 
 \section{Policies}
 \subsection{P0: fixed baseline}
-P0 executes the complete predefined diagnostic sequence without adapting to evidence. It is deliberately conservative and provides the baseline required by the experiment.
+P0 executes the complete predefined diagnostic sequence without adapting to evidence. It is deliberately conservative and provides the fixed-sequence baseline.
 
 \subsection{P2: threshold policy}
-P2 updates beliefs after each observation and commits when the leading hypothesis reaches the configured threshold. The current default is 70\%, with sensitivity tests at 60\%, 70\%, and 80\%. The threshold is not claimed to be universally optimal.
+P2 updates beliefs after each observation and commits when the leading hypothesis reaches the configured threshold. The default is 70\%, with sensitivity tests at 60\%, 70\%, and 80\%. The threshold is not claimed to be universally optimal.
 
 \subsection{P3: value of information proxy}
-P3 chooses the unused diagnostic action with maximum expected information gain per unit diagnostic cost. This is a tractable proxy for decision value, not a full expected-utility calculation. The extension analysis therefore distinguishes value of perfect information and value of sample information from raw entropy reduction.
+P3 chooses the unused diagnostic action with maximum expected information gain per unit diagnostic cost. This is a tractable proxy for decision value, not a full expected-utility calculation. Value of perfect information (VPI) and value of sample information (VSI) are used as extensions to explain why raw entropy reduction is not identical to decision value.
 
 \section{Experiment}
 The executable experiment creates 120 cases for each fixed seed and pre-generates the potential observation for every action. All policies are evaluated on the same cases, preventing policies from receiving different hidden worlds merely because they consume different numbers of random draws. Seeds 2026--2030 are used for multi-seed analysis.
 
 \section{Results}
-The repository contains the current aggregate results and sensitivity tables. Numerical claims in the final submission must be regenerated from the executable harness and accompanied by case-level predictions/actions. The current working interpretation is that P3 can reduce diagnostic effort substantially while retaining competitive accuracy, but it does not universally dominate P2 across thresholds.
+At the 70\% threshold, the verified experiment produced:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Policy & Accuracy & Diagnostic cost & Decision cost & Actions\\
+\midrule
+P0 & 75.83\% & 9.00 & 14.25 & 6.00\\
+P2 & 71.00\% & 5.83 & 10.75 & 4.28\\
+P3 & 73.17\% & 5.36 & 10.63 & 3.64\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Relative to P0, P3 reduces mean diagnostic cost by approximately 40.4\% and diagnostic actions by approximately 39.3\%, with a 2.67 percentage-point reduction in accuracy. P2 is cheaper than P0 but has lower accuracy than P3 at this threshold.
+
+Sensitivity analysis shows that at 60\% P3 has 72.50\% accuracy versus P2's 66.17\%; at 70\% P3 has 73.17\% versus 71.00\%; at 80\% P2 has 75.17\% versus P3's 74.50\%. Thus P3 is not universally superior: it provides a strong efficiency/accuracy trade-off under the current assumptions, while P2 can match or exceed it on accuracy at a higher threshold.
 
 \section{Failure analysis}
-The final version will examine at least five incorrect decisions, classify them by failure condition, and identify the highest-cost error. The case-level record must include the true cause, prediction, observations, actions, posterior, cost, escalation, and the evidence that would have changed the action.
+The verified run produced 1,800 policy-case records and five representative incorrect decisions were examined. Examples include P3 misclassifying a simulated flaky test as test-data/state, P2 confusing test-data/state with an external dependency, and P0 confusing CI infrastructure or an unknown cause with code regression. The maximum observed decision cost was 17, tied across multiple incorrect cases. The detailed case records and observations are maintained in \texttt{results/final\_results.md} and the error-analysis document.
 
 \section{Extensions}
 Two extensions beyond the supplied information-theory ladder are used: value of perfect information (VPI) and value of sample information (VSI). VPI provides an upper bound on the value of learning the true state, while VSI focuses on the expected decision improvement from a particular imperfect observation. These concepts expose a limitation of pure EIG: information can reduce entropy without changing the eventual action.
 
 \section{Limitations}
-The simulated priors and likelihoods are not calibrated to a production CI dataset. The six causes may be incomplete. Historical failure comparability is not validated. A single passing rerun does not establish flakiness. Reddit/community discussion is treated as practitioner evidence, not scientific ground truth. The experiment therefore supports claims about the behavior of the simulated policies under stated assumptions, not general claims about real CI systems.
+The simulated priors and likelihoods are not calibrated to a production CI dataset. The six causes may be incomplete. Historical failure comparability is not validated. A single passing rerun does not establish flakiness. Community discussion is treated as practitioner evidence, not scientific ground truth. The experiment therefore supports claims about the behavior of the simulated policies under stated assumptions, not general claims about real CI systems or production ROI.
 
 \section{AI use and provenance}
-AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, implementation support, reasoning checks, and document structuring. Design choices and assumptions should remain explicitly attributed to the project process, and AI-generated claims must be checked against primary sources. The final submission should include the cohort-required AI review log with accepted and rejected comments.
+AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, implementation support, reasoning checks, simulation support, and document structuring. The user's project decisions remain the source of the selected causes, priors, qualitative evidence assumptions, operational response boundaries, and research direction. The AI review log records accepted and rejected review comments and explicitly rejects unsupported claims.
 
 \section{Reproducibility}
-The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, and Jupyter notebook. The final release should be produced only after the executable experiment, confusion matrix, five-error analysis, AI reviews, and PDF compilation have been verified.
+The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, Jupyter notebook, error analysis, and final result summary. GitHub Actions validates the model checks and regenerates the experiment and case-level evidence from fixed seeds.
 
 \end{document}
