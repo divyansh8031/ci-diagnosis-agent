@@ -1,34 +1,39 @@
 # Week 1 rubric audit
 
-This audit is based on the current cohort/research files in the project. The cohort asks for a baseline plus at least two policies, a 100-case experiment, saved predictions/actions, confusion matrix/applicable metrics, five incorrect decisions, named failure conditions, highest-cost error, probability decision record, AI-review log, `.dot` architecture, and a LaTeX preprint.
+This audit is based on the current cohort/research requirements and the verified GitHub Actions experiment.
 
-| Requirement | Status | Evidence / next action |
+| Requirement | Status | Evidence |
 |---|---|---|
 | Problem framing | DONE | CI integration-test failure diagnosis |
-| Hidden state / observation / belief framing | DONE | research notes + simulator |
+| Hidden state / observation / belief framing | DONE | `src/simulator.py`, `src/belief_engine.py` |
 | Prior/likelihood decision record | DONE | `docs/probability_decision_record.md` |
-| P0 baseline | IMPLEMENTED | shared-case experiment |
-| P2 threshold policy | IMPLEMENTED | `src/policies.py` |
-| P3 EIG-per-cost policy | IMPLEMENTED | `src/policies.py` |
-| 100+ cases | IMPLEMENTED IN HARNESS | 120 cases per seed |
-| Same cases for all policies | DONE IN HARNESS | `experiments/shared_case_experiment.py` |
-| Fixed seeds | DONE | seeds 2026–2030 |
-| Accuracy/cost/actions/escalation | IMPLEMENTED | experiment + notebook |
-| Confusion matrix | TODO | generate from saved case-level predictions |
-| Five incorrect decisions | TODO | populate `docs/error_analysis.md` from case-level output |
-| Highest-cost error | TODO | derive from case-level consequence records |
-| Extension concepts beyond supplied ladder | DONE | VPI + VSI in `docs/extension_concepts.md` |
-| Stop rule stated | PARTIAL | design exists; final decision-value implementation should be tightened |
+| P0 baseline | DONE | `experiments/shared_case_experiment.py` |
+| P2 threshold policy | DONE | `src/policies.py` |
+| P3 EIG/value-of-information policy | DONE | `src/policies.py` |
+| 100+ cases | DONE | 120 cases × 5 fixed seeds |
+| Same cases for all policies | DONE | shared-case generation |
+| Fixed seeds | DONE | 2026–2030 |
+| Saved predictions/actions/observations | DONE | GitHub Actions final-evidence artifact |
+| Accuracy/cost/actions/escalation | DONE | `results/final_results.md` |
+| Confusion matrices | DONE | generated JSON files in final-evidence artifact |
+| Five incorrect decisions | DONE | `docs/error_analysis.md` |
+| Named failure conditions | DONE | `docs/error_analysis.md` |
+| Highest-cost error | DONE | maximum observed decision cost = 17; tied cases recorded |
+| Extension concepts beyond ladder | DONE | VPI + VSI in `docs/extension_concepts.md` |
+| Stop-rule / decision-value limitation | DONE WITH LIMITATION | P3 is explicitly documented as EIG/cost proxy; VSI/VPI extension explains limitation |
 | `.dot` architecture | DONE | `docs/architecture.dot` |
-| AI review log | TODO/PENDING | `docs/ai_review_log.md` is the audit location; actual reviews must be performed and recorded |
-| LaTeX preprint | TODO | create after final experiment output is verified |
-| Community participation evidence | NOT VERIFIED HERE | research file lists participation as a required activity; attach actual records before claiming completion |
-| Primary-source research | PARTIAL/NEEDS AUDIT | verify every external claim against primary sources |
+| AI review log | DONE | `docs/ai_review_log.md` with accepted/rejected comments |
+| LaTeX preprint | DONE | `paper/preprint.tex` with verified results |
+| Executable reproducibility | DONE | final-evidence GitHub Actions run passed all validation and experiment steps |
+| Community participation evidence | USER ACTION REQUIRED | Do not claim completion until actual cohort/community records are attached |
+| Primary-source research audit | USER/RESEARCH RECORD REQUIRED | External claims must be checked against the actual primary sources used in the paper |
 
-## Critical correction
+## Verified experiment
 
-The cohort material distinguishes the threshold and value-of-information policies. Do not relabel the policies to make the paper sound stronger than the source: P2 is the threshold policy and P3 is the value-of-information/EIG policy for the current experiment. Historical-aware reasoning remains a useful extension because the research notes promoted historical failure evidence to a first-class evidence source.
+The final-evidence GitHub Actions run validated the simulator, Bayesian worked example, failed-rerun update, and information-gain checks, then generated the shared-case experiment, sensitivity analysis, case-level records, confusion matrices, five-error selection, and highest-cost error.
 
-## Submission rule
+At the 70% threshold: P0 accuracy 75.83%, mean diagnostic cost 9.00, mean decision cost 14.25; P2 accuracy 71.00%, diagnostic cost 5.83, decision cost 10.75; P3 accuracy 73.17%, diagnostic cost 5.36, decision cost 10.63.
 
-Do not mark a TODO as complete merely because code exists. A rubric item is complete only when the required evidence is present and reproducible.
+## Submission discipline
+
+Do not claim community participation or primary-source verification without attaching the actual evidence. Do not describe simulation assumptions as measured real-world probabilities. Do not claim P3 universally dominates P2.
