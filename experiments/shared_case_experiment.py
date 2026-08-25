@@ -43,6 +43,7 @@ def run_policy(cases, policy_name, threshold=0.70):
     for case in cases:
         beliefs = initial_beliefs()
         actions = []
+        observations_seen = []
         cost = 0
         for _ in range(len(Action)):
             state = PolicyState(beliefs, actions, cost)
@@ -64,20 +65,31 @@ def run_policy(cases, policy_name, threshold=0.70):
             else:
                 raise ValueError(policy_name)
 
-            beliefs = posterior_after_observation(beliefs, action, case.observations[action])
+            observation = case.observations[action]
+            beliefs = posterior_after_observation(beliefs, action, observation)
             actions.append(action)
+            observations_seen.append(f"{action.value}={'PASS' if observation else 'FAIL'}")
             cost += ACTION_COSTS[action]
 
         predicted = max(beliefs, key=beliefs.get)
-        escalated = predicted in {Cause.TEST_DATA_STATE, Cause.OTHER}
+        confidence = beliefs[predicted]
+        escalated = predicted in {Cause.CODE_REGRESSION, Cause.EXTERNAL_DEPENDENCY,
+                                  Cause.CI_INFRASTRUCTURE, Cause.TEST_DATA_STATE, Cause.OTHER}
+        # Consequence classes follow the probability decision record:
+        # human review = 8, human intervention/change = 9. Flaky rerun is automated.
+        consequence_cost = 0 if predicted == Cause.FLAKY_TEST else (9 if predicted == Cause.OTHER else 8)
         results.append({
             "case_id": case.case_id,
             "true_cause": case.true_cause.value,
             "predicted_cause": predicted.value,
+            "confidence": confidence,
             "correct": predicted == case.true_cause,
-            "cost": cost,
+            "diagnostic_cost": cost,
+            "consequence_cost": consequence_cost,
+            "decision_cost": cost + consequence_cost,
             "actions": len(actions),
             "action_sequence": ">".join(a.value for a in actions),
+            "observations": ";".join(observations_seen),
             "escalated": escalated,
         })
     return results
@@ -86,7 +98,8 @@ def run_policy(cases, policy_name, threshold=0.70):
 def summarize(results):
     return {
         "accuracy": mean(r["correct"] for r in results),
-        "mean_diagnostic_cost": mean(r["cost"] for r in results),
+        "mean_diagnostic_cost": mean(r["diagnostic_cost"] for r in results),
+        "mean_decision_cost": mean(r["decision_cost"] for r in results),
         "mean_diagnostic_actions": mean(r["actions"] for r in results),
         "escalation_rate": mean(r["escalated"] for r in results),
     }
