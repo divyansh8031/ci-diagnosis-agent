@@ -1,550 +1,474 @@
 # CI Diagnosis Agent — Research File
 
-**Status:** v0.1 — research/design draft  
+**Status:** v0.2 — probabilistic model, information-value analysis, and final simulation results incorporated  
 **Problem:** CI integration-test failure diagnosis  
 **Scope:** Diagnose and select the next diagnostic action; do not automatically remediate in the first version.
 
-> This is a living research document. Observations, hypotheses, practitioner evidence, sources, and experiment results are kept separate. Anything not yet validated is explicitly marked as a hypothesis or open question.
+> This is a living research document. Assumptions, practitioner observations, research sources, calculations, experiment results, and limitations are kept separate. Simulation numbers are not presented as production statistics.
 
 ## 1. Problem Statement
 
 > **The agent observes CI integration-test failure information and must select the next diagnostic action because the actual failure cause is hidden.**
 
-The current scope is narrower than debugging an entire CI/CD system. The focus is **integration-test failures** where the available evidence does not immediately reveal the root cause.
-
-The first version is intended to diagnose and recommend rather than automatically modify or revert code, configuration, databases, or services.
+The focus is integration-test failures where the available evidence does not immediately reveal the root cause. The first version diagnoses and recommends rather than automatically modifying code, configuration, databases, or services.
 
 ## 2. Project Objective
 
-Build and test a small agent that can:
+The agent should:
 
 1. observe incomplete evidence;
 2. maintain competing hypotheses about the hidden cause;
-3. use current and historical evidence;
+3. update beliefs when evidence arrives;
 4. choose a diagnostic action;
-5. receive feedback;
-6. update its belief;
-7. continue investigating or recommend human review when appropriate.
+5. account for diagnostic cost;
+6. continue investigating when useful;
+7. escalate when evidence is insufficient or consequences are high.
 
-A key research question is whether using historical failure evidence improves the agent's choice of the **next diagnostic action**.
+The central research question is whether **belief-aware, information-value-based action selection** can reduce diagnostic effort while retaining useful diagnostic accuracy.
 
-## 3. Technical Terms
+## 3. Current Hidden States
 
-- Continuous Integration (CI)
-- Integration testing
-- CI failure diagnosis
-- Failure triage
-- Root-cause analysis
-- Fault localization
-- Regression diagnosis
-- Automated debugging
-- Flaky test detection
-- Test-data dependency
-- Dependency/service failure
-- Failure reproduction
-- Historical failure analysis
-- Hidden state
-- Belief state
-- Evidence/observation
-- Diagnostic action
-- Policy
-- Feedback
-- Human-in-the-loop
-- Decision cost
-- Probability decision record
-- Calibration
-- Abstention/escalation
+The simulation currently uses six mutually exclusive hidden causes:
 
-## 4. Initial Research Questions
+| Cause | Meaning |
+|---|---|
+| `code_regression` | A recent code change caused the failure. |
+| `flaky_test` | The test is nondeterministic/intermittently failing. |
+| `external_dependency` | A relevant dependent/third-party service is responsible. |
+| `ci_infrastructure` | CI runner, package, container, pod, network, or related infrastructure is responsible. |
+| `test_data_state` | DB/test data/state changed in a way that explains the failure. |
+| `other` | Residual category for causes not represented by the above states. |
 
-### Problem
-- How do engineers actually diagnose CI integration-test failures when the cause is not obvious?
-- What do they investigate first?
-- How do they decide what to investigate next?
+The explicit `other` state is important because an agent forced to choose among known causes can become confidently wrong when none of them explains the case.
 
-### Code-change diagnosis
-- What evidence is considered strong enough to believe a recent code change caused the failure?
-- How do engineers distinguish a genuine regression from a failure that happened after an unrelated commit?
-- How useful is comparing the failing build with the last-green build?
+## 4. Simulation Priors
 
-### DB/test-data diagnosis
-- How do engineers determine whether an assertion failure is caused by changed DB/test data?
-- What evidence is normally collected before blaming application code?
+The current simulation uses:
 
-### Service diagnosis
-- If a dependent service returns 503, how do engineers establish whether the service is actually responsible for the test failure?
-- Can a 503 be a symptom rather than the root cause?
+| Hidden cause | Prior |
+|---|---:|
+| Code regression | 0.40 |
+| Flaky test | 0.30 |
+| External dependency | 0.10 |
+| CI infrastructure | 0.10 |
+| Test-data/state | 0.05 |
+| Other | 0.05 |
+| **Total** | **1.00** |
 
-### Flaky-test diagnosis
-- When do engineers rerun a failed integration test?
-- How do they distinguish flakiness from a real defect?
-- How much history is useful?
+These values are **research assumptions for simulation**, not measured real-world CI failure frequencies. They were chosen from the project's qualitative reasoning and should be replaced or calibrated with independent labeled historical data if such data becomes available.
 
-### Historical evidence
-- Do engineers look at previous CI failures when diagnosing a new failure?
-- What information is needed to decide whether an old failure is genuinely comparable to the current one?
-- Is matching the test name/error signature enough?
-- Should code changes, dependencies, environment, configuration and DB/test data also be compared?
-- When can historical evidence be misleading because two similar failures have different root causes?
+A key methodological rule is that simulated cases generated from these priors cannot subsequently be treated as independent evidence that validates the same priors.
 
-### Action selection
-- When several causes remain plausible, how do engineers choose the next diagnostic action?
-- Do they prefer the cheapest check, the most informative check, the most relevant check, or a standard troubleshooting sequence?
-- When should the agent stop investigating and ask a human?
+## 5. Evidence Model
 
-## 5. Current Hidden-State Hypotheses
+For each diagnostic action, the simulator defines a binary positive/negative observation. The model specifies:
 
-These are working hypotheses, not validated probabilities:
+> `P(observation | hidden cause)`
 
-1. **Code change caused the failure**
-2. **Database is unavailable**
-3. **Dependent/third-party service is unavailable**
-4. **Database or test data changed**
-5. **Test is flaky**
-6. **Test/assertion itself is the problem**
+The current qualitative-to-numeric mapping is:
 
-These categories may change after practitioner discussions, source review, and experiments.
+- **often → 0.8**
+- **sometimes → 0.4**
+- **rarely → 0.1**
 
-## 6. What the Agent Initially Observes
+Current likelihoods for a positive observation are:
 
-- CI/CD console logs
-- failed test name and failure output
-- current commit/change
-- relevant codebase
-- previous/last-green build information
-- relevant dependent services/dependencies
+| Action | Code | Flaky | Dependency | CI infra | Test data | Other |
+|---|---:|---:|---:|---:|---:|---:|
+| Rerun | 0.4 | 0.8 | 0.4 | 0.1 | 0.1 | 0.1 |
+| Search history | 0.4 | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Check dependency | 0.1 | 0.4 | 0.8 | 0.1 | 0.1 | 0.1 |
+| Local reproduction | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Inspect code | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Check DB | 0.1 | 0.1 | 0.1 | 0.1 | 0.8 | 0.1 |
 
-The agent should receive dependencies relevant to the failing integration test rather than an unrestricted view of every service in the organization.
+These are assumptions used to create a reproducible diagnostic world. They are not claims that, for example, 80% of real flaky tests pass on rerun.
 
-## 7. What Is Initially Hidden
+## 6. Diagnostic Actions and Relative Costs
 
-The agent does not directly know:
+The simulator currently assigns relative diagnostic costs:
 
-- the actual root cause;
-- whether the code change caused the failure;
-- whether DB/test data changed;
-- whether a dependent service caused the failure;
-- whether the test is flaky;
-- whether the test/assertion is itself incorrect.
+| Action | Cost |
+|---|---:|
+| Rerun | 1 |
+| Search history | 1 |
+| Check dependency | 1 |
+| Local reproduction | 2 |
+| Inspect code | 2 |
+| Check DB | 2 |
 
-Some evidence about these hidden states must be obtained through diagnostic actions.
+These are simulation units rather than money, minutes, or production resource measurements.
 
-## 8. Historical Evidence
+The design rationale is that a rerun/history/dependency check is comparatively cheap, while local reproduction, code inspection, and DB inspection require more investigation effort. Future versions should replace these assumptions with measured or practitioner-derived costs.
 
-Historical evidence is now a **first-class evidence source**, but not a guaranteed answer.
+## 7. Bayesian Belief Update
 
-The agent may search previous CI failures for cases that appear comparable to the current failure.
+The agent starts each case with the prior distribution. After observing evidence `E`, it updates using:
 
-### Current idea
+`P(cause | E) = P(E | cause) P(cause) / P(E)`
+
+where:
+
+`P(E) = Σ P(E | cause) P(cause)`.
+
+### Worked example: RERUN = PASS
+
+Initial belief:
 
 ```text
-Current CI failure
-       ↓
-Current observations
-       +
-Historical failures
-       ↓
-Determine comparability
-       ↓
-Use comparable cases as evidence
-       ↓
-Update belief
-       ↓
-Choose next diagnostic action
+Code regression       40%
+Flaky test            30%
+External dependency  10%
+CI infrastructure    10%
+Test data              5%
+Other                  5%
 ```
 
-### Important constraint
-
-A similar error does **not** automatically mean the current failure has the same cause.
-
-Example:
+For a passing rerun, the likelihoods are:
 
 ```text
-Previous:
-Expected ADMIN, got USER
-Root cause → DB/test-data change
-
-Current:
-Expected ADMIN, got USER
-Root cause → code regression
+Code       0.4
+Flaky      0.8
+Dependency 0.4
+CI         0.1
+Data       0.1
+Other      0.1
 ```
+
+Multiply prior × likelihood:
+
+```text
+Code       0.40 × 0.40 = 0.160
+Flaky      0.30 × 0.80 = 0.240
+Dependency 0.10 × 0.40 = 0.040
+CI         0.10 × 0.10 = 0.010
+Data       0.05 × 0.10 = 0.005
+Other      0.05 × 0.10 = 0.005
+```
+
+The evidence probability is:
+
+`P(PASS) = 0.46`.
+
+Normalize:
+
+```text
+Code       0.160 / 0.46 = 34.78%
+Flaky      0.240 / 0.46 = 52.17%
+Dependency 0.040 / 0.46 =  8.70%
+CI         0.010 / 0.46 =  2.17%
+Data       0.005 / 0.46 =  1.09%
+Other      0.005 / 0.46 =  1.09%
+```
+
+The important interpretation is:
+
+> A passing rerun does not prove that the test is flaky. It changes the belief distribution, making flakiness more plausible under the current model.
+
+### Worked example: RERUN = FAIL
+
+For a failed rerun, use `1 - P(PASS | cause)`:
+
+```text
+Code       0.60
+Flaky      0.20
+Dependency 0.60
+CI         0.90
+Data       0.90
+Other      0.90
+```
+
+The resulting posterior is approximately:
+
+```text
+Code       44.44%
+Flaky      11.11%
+Dependency 11.11%
+CI         16.67%
+Data        8.33%
+Other       8.33%
+```
+
+Again, a failed rerun does not prove a code regression. It redistributes belief toward several competing explanations.
+
+## 8. Entropy and Information Gain
+
+Entropy measures uncertainty in the current belief state:
+
+`H(S) = -Σ p(s) log2 p(s)`.
+
+For the initial prior:
+
+`H(before) = 2.1464 bits`.
+
+### PASS outcome
+
+After `RERUN = PASS`:
+
+`H(after | PASS) = 1.5879 bits`.
+
+The information gained for this particular outcome is:
+
+`2.1464 - 1.5879 = 0.5585 bits`.
+
+### FAIL outcome
+
+After `RERUN = FAIL`:
+
+`H(after | FAIL) = 2.2527 bits`.
+
+The outcome-specific information gain is therefore:
+
+`2.1464 - 2.2527 = -0.1063 bits`.
+
+This is not an error. Evidence can increase entropy when it removes a leading hypothesis while leaving several alternatives plausible. The important distinction is between **outcome-specific information gain** and **expected information gain before running the check**.
+
+## 9. Expected Information Gain
+
+Before running a diagnostic action, the agent does not know its result. Therefore it uses expected information gain:
+
+`EIG(action) = H(S) - H(S | E)`
+
+where `H(S | E)` is the probability-weighted average entropy across all possible observations.
+
+For the rerun:
+
+```text
+P(PASS) = 0.46
+P(FAIL) = 0.54
+
+Expected entropy
+= 0.46 × 1.5879 + 0.54 × 2.2527
+= 1.9469 bits
+
+EIG
+= 2.1464 - 1.9469
+= 0.1995 bits
+```
+
+This is the quantity that should be used when deciding whether to run a check **before** knowing its result.
+
+## 10. Information Gain per Cost
+
+Using the current prior/likelihood model:
+
+| Action | Expected IG | Cost | IG / Cost |
+|---|---:|---:|---:|
+| Search history | 0.2402 | 1 | **0.2402** |
+| Rerun | 0.1995 | 1 | **0.1995** |
+| Local reproduction | 0.3879 | 2 | **0.1939** |
+| Inspect code | 0.3879 | 2 | **0.1939** |
+| Check dependency | 0.1819 | 1 | **0.1819** |
+| Check DB | 0.0894 | 2 | **0.0447** |
+
+Thus, at the initial belief state, **search history has the highest expected information gain per unit simulation cost**.
+
+This illustrates why the project is not simply choosing the action with the largest raw information gain. Cost matters.
+
+## 11. Policy Definitions
+
+### P0 — Fixed baseline
+
+P0 follows a fixed action sequence without belief-aware stopping. It provides the baseline for asking whether adaptive reasoning is actually useful.
+
+### P2 — Threshold policy
+
+P2 updates beliefs after observations and stops when the highest posterior reaches the configured confidence threshold. The final experiment uses a 70% threshold as the main comparison and also evaluates 60% and 80% sensitivity.
+
+The threshold is a simulation policy parameter, not a claim that 70% is the optimal production threshold.
+
+### P3 — Value-of-information policy
+
+P3 updates beliefs and selects the next action using expected information gain per cost. It stops according to the same terminal/threshold logic.
+
+The intended loop is:
+
+```text
+Initial prior
+    ↓
+Choose action by EIG/cost
+    ↓
+Observe result
+    ↓
+Bayesian posterior update
+    ↓
+Recalculate uncertainty and EIG/cost
+    ↓
+Choose next action or stop/escalate
+```
+
+## 12. What the 120 Simulated Cases Actually Mean
+
+The final experiment uses:
+
+- **120 cases per seed**;
+- **5 fixed seeds (2026–2030)**;
+- **600 cases per policy**;
+- **1,800 policy-case records across P0/P2/P3**.
+
+Each simulated case contains:
+
+1. a hidden true cause sampled from the simulation priors;
+2. one pre-generated observation outcome for every available diagnostic action.
+
+The policy does **not** receive the hidden cause. It receives only the observations revealed by the actions it chooses.
+
+The important fairness property is that P0, P2, and P3 are evaluated on the **same pre-generated cases and observation opportunities**. This prevents one policy from receiving an easier random world than another.
+
+### What these cases do not do
+
+The 120 cases do **not** independently recalibrate the priors. They are generated from the priors and likelihoods that define the simulation world.
 
 Therefore:
 
-> **Historical similarity is evidence, not proof of the same root cause.**
+> The experiment evaluates policies **under the assumed probabilistic world**; it does not establish that the assumed world matches production CI.
 
-### Candidate historical features
+Independent historical CI data would be required for empirical calibration.
 
-A historical failure may be compared using:
+## 13. Decision Consequence Model
 
-- test name;
-- error/assertion signature;
-- stack trace or failure location;
-- changed code/function;
-- commit/build;
-- dependency/service involved;
-- environment;
-- configuration/version;
-- relevant DB/test-data context;
-- previous outcome;
-- known root cause.
+The final simulation also includes a consequence class:
 
-The exact comparability criteria are **not yet validated**.
+- `0` for the automated flaky-test path;
+- `8` for human review/intervention classes;
+- `9` for the highest-consequence `other` class.
 
-### Historical evidence can affect
+These are explicit simulation units, not production monetary values.
 
-1. **Belief:** comparable previous failures can increase or decrease belief in a hypothesis.
-2. **Action selection:** historical evidence can influence which diagnostic check should be performed next.
+The decision cost is:
 
-### Research question
+`decision cost = diagnostic cost + consequence cost`.
 
-> **What information is necessary to determine whether a previous CI failure is genuinely comparable to the current failure?**
+This is why decision cost is more informative than accuracy alone: a wrong diagnosis that triggers expensive human intervention can matter more than a cheap diagnostic mistake.
 
-### Planned experiment
+## 14. Final Simulation Results
 
-Compare:
+The final GitHub Actions experiment used commit `eefde21978a47e4bcab61290fbc49304304c9439`, five fixed seeds, 120 cases per seed, and identical pre-generated observation opportunities.
 
-**P0 — no historical evidence**
+### Main comparison at 70% threshold
 
-```text
-Current evidence
-      ↓
-Choose next diagnostic action
-```
+| Policy | Accuracy | Mean diagnostic cost | Mean decision cost | Mean actions | Escalation |
+|---|---:|---:|---:|---:|---:|
+| P0 fixed sequence | 75.83% | 9.00 | 14.25 | 6.00 | 65.67% |
+| P2 threshold | 71.00% | 5.83 | 10.75 | 4.28 | 61.50% |
+| P3 EIG/cost | 73.17% | 5.36 | 10.63 | 3.64 | 65.83% |
 
-with:
+P3 reduces mean diagnostic cost by approximately **40.4% relative to P0** and mean diagnostic actions by approximately **39.3%**, while losing 2.67 percentage points of accuracy relative to P0.
 
-**P2 — historical-aware**
+P2 is cheaper than P0 but loses more accuracy.
 
-```text
-Current evidence
-      +
-Comparable historical failures
-      ↓
-Choose next diagnostic action
-```
+### Threshold sensitivity
 
-The experiment will test whether historical evidence improves action selection.
+| Threshold | Policy | Accuracy | Mean diagnostic cost | Mean decision cost | Mean actions |
+|---:|---|---:|---:|---:|---:|
+| 60% | P2 | 66.17% | 4.53 | 10.03 | 3.63 |
+| 60% | P3 | 72.50% | 4.60 | 9.86 | 3.19 |
+| 70% | P2 | 71.00% | 5.83 | 10.75 | 4.28 |
+| 70% | P3 | 73.17% | 5.36 | 10.63 | 3.64 |
+| 80% | P2 | 75.17% | 6.75 | 11.98 | 4.88 |
+| 80% | P3 | 74.50% | 6.09 | 11.51 | 4.19 |
 
-## 9. Candidate Actions
+The defensible conclusion is an **efficiency/accuracy trade-off**, not universal P3 superiority. At 60% and 70%, P3 has lower decision cost and higher accuracy than P2; at 80%, P2 has slightly higher accuracy while P3 remains cheaper.
 
-1. Inspect failed-test logs.
-2. Inspect the relevant code change.
-3. Compare the current build with the previous/last-green build.
-4. Check relevant dependent-service availability.
-5. Check database availability.
-6. Inspect relevant DB/test data.
-7. Inspect test history.
-8. Search comparable historical failures.
-9. Rerun the relevant integration test when appropriate.
-10. Recommend human review.
+## 15. Error Analysis
 
-The first version will not automatically revert code/configuration or make destructive changes.
+Five representative incorrect decisions from the executable experiment:
 
-## 10. Provisional Diagnostic Policy
+1. **P3, seed 2026, case 2026-12:** true `flaky_test`, predicted `test_data_state`, confidence 38.20%. The model allowed later state evidence to outweigh a positive rerun. This motivates stronger calibration for state-related checks and repeated-history evidence.
+2. **P2, seed 2029, case 2029-5:** true `test_data_state`, predicted `external_dependency`, confidence 46.32%. Dependency and DB evidence competed. This motivates more discriminative DB/state evidence.
+3. **P2, seed 2028, case 2028-75:** true `external_dependency`, predicted `test_data_state`, confidence 68.56%. The model over-weighted the DB observation after several negative signals. A persistent service-health/availability signal may be more useful than a single binary dependency check.
+4. **P0, seed 2026, case 2026-52:** true `ci_infrastructure`, predicted `code_regression`, confidence 62.98%. The fixed sequence continued investigating even when infrastructure evidence was plausible. This illustrates the weakness of a fixed sequence.
+5. **P0, seed 2026, case 2026-16:** true `other`, predicted `code_regression`, confidence 62.98%. The model was forced to choose a known cause when evidence did not support one strongly. This motivates an explicit abstention/unknown decision state.
 
-Current working order:
+Maximum observed decision cost was **17**, with ties among multiple incorrect cases. The broader finding is that errors requiring human review can dominate total decision cost.
 
-1. Inspect CI logs.
-2. Check obvious DB/dependency availability failures.
-3. Inspect the relevant code change.
-4. Compare with the previous/last-green build.
-5. Investigate relevant DB/test data.
-6. Use test history and historical failures when useful.
-7. Rerun when the expected information gain justifies the cost.
-8. Recommend human review when evidence remains insufficient or the likely action has high risk/cost.
+## 16. Human-in-the-Loop Policy
 
-This is **not yet validated as the optimal policy**.
+The project's operational reasoning is deliberately conservative:
 
-A major research question is whether a fixed sequence is inferior to choosing the next action from the current belief/evidence state.
+### Flaky test
 
-## 11. Evidence → Belief
+If rerun evidence and history support flakiness, rerunning is an automated low-cost action. A rerun failure should not automatically imply a code regression; the agent should update beliefs and continue diagnosis.
 
-Current qualitative hypotheses:
+### Code regression
 
-- A 503 from a relevant dependent service increases belief that service unavailability is involved.
-- A confirmed service outage plus a failing test that depends on it is stronger evidence than either observation alone.
-- A recent code change alone is weak evidence.
-- A changed function directly involved in the failing test path is stronger code-related evidence.
-- A failure appearing after a relevant change and after a previously green build is stronger temporal evidence, but still does not prove causality.
-- DB/test data that changed in a way that explains the assertion increases belief in a data-related cause.
-- Repeated failure/pass variation without another convincing explanation increases belief in flakiness.
-- A genuinely comparable historical failure can provide additional evidence for or against a hypothesis.
-- A historical match with only a similar error message should be treated as weaker evidence than a match across multiple relevant features.
+If evidence points to a recent code regression, the agent should present the evidence and a proposed remediation/revert to a human rather than automatically changing code in this first version.
 
-These are qualitative hypotheses until tested.
+### External dependency
 
-## 12. Practitioner Observation From Current Project
+Check relevant service health/availability. If the service is unavailable, retry when appropriate. If the issue persists or the agent cannot establish responsibility safely, escalate with the evidence and suggested next step.
 
-I have observed cases where a code fix for one scenario was followed by another integration-test scenario failing.
+### CI infrastructure
 
-This led to the working principle:
+Use CI logs and infrastructure-specific evidence to identify package-download, container, runner, pod, or environment failures. Changes requiring configuration/version intervention should be escalated to a human.
 
-> **A recent code change is not equivalent to proof that the code caused the failure.**
+### Test-data/state
 
-A stronger code-related signal may require:
+DB/test-data changes can be high-context and potentially destructive to investigate. The agent should present evidence and suggestions for human review rather than modifying state automatically.
 
-- changed function is involved in the failing test path;
-- failure appeared after the change;
-- previous/last-green build passed;
-- changed logic can plausibly explain the assertion/result.
+### Other/unknown
 
-These are proposed signals, not validated rules.
+If the residual/unknown state remains plausible, the agent should abstain/escalate rather than force a confident known-cause diagnosis.
 
-## 13. Related Research
+## 17. Claims and Limitations
+
+The following remain **simulation findings or hypotheses**, not production claims:
+
+- The priors are correct for real CI systems.
+- The 0.8/0.4/0.1 likelihood mapping reflects production frequencies.
+- The relative action costs correspond to actual engineering time or money.
+- The 70% threshold is optimal.
+- Historical similarity reliably identifies root cause.
+- Rerun alone reliably identifies flakiness.
+- P3 will outperform P0/P2 on production CI data.
+- The simulated consequence costs correspond to real organizational impact.
+
+The experiment demonstrates that the architecture can perform Bayesian updates, compute entropy/EIG, select actions adaptively, and produce a reproducible policy comparison under the stated assumptions.
+
+## 18. Reproducibility
+
+The repository contains executable tests for the simulator, Bayesian updates, failed-rerun behavior, and information gain. The final workflow generated the shared-case experiment, sensitivity analysis, case-level records, confusion matrices, representative error analysis, and highest-cost-error record.
+
+The shared-case experiment uses fixed seeds and pre-generates all action observations so P0/P2/P3 receive identical evidence opportunities.
+
+## 19. Research Sources
 
 ### LLM-based integration-test diagnosis
-
-Google's 2026 Auto-Diagnose paper studies LLM-based diagnosis of integration-test failures and reports a manual evaluation on 71 real-world failures.
+Google's 2026 Auto-Diagnose paper studies LLM-based diagnosis of integration-test failures and reports manual evaluation on 71 real-world failures.
 
 Source: https://arxiv.org/abs/2604.12108
 
-### Regression-inducing code changes
-
-Ziftci and Reardon studied automatically identifying changes that induce test failures in CI at Google scale. This is relevant to the relationship between code changes and CI failures, but does not prove that a simple code-diff heuristic will work for this agent.
+### Regression-inducing changes
+Ziftci and Reardon studied automatically identifying changes that induce test failures in CI at Google scale.
 
 Source: https://research.google/pubs/who-broke-the-build-automatically-identifying-changes-that-induce-test-failures-in-continuous-integration-at-google-scale/
 
 ### Flaky-test diagnosis
-
 Parry et al. empirically evaluated flaky-test detection approaches involving rerunning and machine-learning techniques.
 
 Source: https://link.springer.com/article/10.1007/s10664-023-10307-w
 
 ### Static flaky-test prediction
-
 Pontillo, Palomba and Ferrucci studied static prediction of test flakiness.
 
 Source: https://link.springer.com/article/10.1007/s10664-022-10227-1
 
 ### Practitioner evidence
-
-A recent r/devops discussion asks practitioners what they actually do when a test passes locally but fails in CI. Practitioner discussions are treated as qualitative evidence rather than controlled research.
+A r/devops discussion is treated as qualitative practitioner evidence rather than controlled research.
 
 Source: https://www.reddit.com/r/devops/comments/1v119en/whats_your_actual_workflow_when_a_test_fails_in/
 
-## 14. Reddit Research Targets
+## 20. Open Research Questions
 
-| Community | Why relevant | Status |
-|---|---|---|
-| r/devops | CI/CD, pipeline debugging, dependencies, environments | Posted; responses to be recorded |
-| r/softwaretesting | Integration tests, flaky tests, test diagnosis | Target |
-| r/QualityAssurance | QA/test reliability and CI testing practice | Target |
-| r/cicd | Direct CI/CD focus | Target |
-| r/jenkinsci | Jenkins-specific CI failure workflows | Target |
-| r/githubactions | GitHub Actions CI workflows | Target |
+1. Can the assumed priors and likelihoods be calibrated against a real labeled CI-failure dataset?
+2. How should historical failures be scored for comparability?
+3. How should evidence sources that are correlated be handled so information is not double-counted?
+4. Can an explicit unknown/abstention state improve high-consequence cases?
+5. Can consequence-sensitive thresholds outperform a single fixed threshold?
+6. Can human review cost be estimated from real workflow data?
+7. How does the policy behave under distribution shift when failure types change?
+8. Can richer observations replace binary PASS/FAIL likelihoods without making the model overconfident?
 
-Human responses will only be recorded after they actually occur.
+## 21. Research Integrity Note
 
-## 15. Practitioner Questions
-
-### Primary r/devops question
-
-> When an integration test fails in CI and the root cause isn't obvious, what do you personally investigate first, and how do you decide what to investigate next?
->
-> For example: CI logs/stack trace, database availability, dependent/third-party service availability, recent code changes, previous/last-green build, test/DB data, previous failure history, or rerunning the test.
->
-> More importantly, how do you decide what to investigate next?
-
-### Historical evidence follow-up
-
-> When diagnosing a new CI integration-test failure, do you look at previous failures with similar errors/tests? If so, how do you decide whether an old failure is actually comparable to the current one?
->
-> Is matching the test name/error enough, or do you also compare the commit/code change, dependency versions, environment, configuration, database/test data, etc.?
-
-### Code-change question
-
-> When an integration test starts failing after a code change, how do you determine whether the code change actually caused the failure?
->
-> Do you look at the changed function, execution path, assertion, previous/last-green build, test data, or something else?
->
-> Have you seen cases where a fix for one scenario caused another integration-test scenario to fail?
-
-### DB/test-data question
-
-> How do you diagnose an integration-test failure when the application code hasn't obviously changed the expected behavior, but the assertion is different from what the test expects?
->
-> How do you determine whether the problem is changed database/test data rather than application code?
-
-### Service question
-
-> If an integration test fails and the logs contain a 503 from a dependent service, how do you determine whether the service is actually responsible for the failure?
->
-> Would you first verify service availability, inspect service logs/health, rerun the test, or investigate something else?
-
-### Flaky-test question
-
-> When an integration test fails in CI, when do you decide to rerun it?
->
-> What evidence makes you suspect a flaky test rather than a real defect?
-
-## 16. X / Researcher Targets
-
-Relevant researchers/engineers to verify:
-
-- Celal Ziftci
-- Jim Reardon
-- Owain Parry
-- Valeria Pontillo
-- Phil McMinn
-
-The X activity requirement is **not complete**. No comments or discussions will be fabricated.
-
-## 17. Claims Requiring Verification or Experiment
-
-The following must not be presented as established findings yet:
-
-- The proposed diagnostic order is effective.
-- A specific prior probability is correct.
-- A specific evidence weight is correct.
-- Last-green comparison improves diagnosis.
-- Historical failure comparison improves action selection.
-- A particular definition of “comparable historical failure” is reliable.
-- Code-diff relevance reliably identifies code-caused failures.
-- Reruns reliably identify flaky tests.
-- A particular human-review threshold is optimal.
-- Evidence-driven action selection outperforms a fixed sequence.
-
-## 18. Initial Probability Model — Not Final
-
-An earlier brainstorming version used these illustrative weights:
-
-| Hypothesis | Initial illustrative weight |
-|---|---:|
-| Code change | 50 |
-| DB unavailable | 10 |
-| Service unavailable | 10 |
-| DB/test-data change | 5 |
-| Flaky | 15 |
-| Test problem | 10 |
-
-These are **not measured probabilities** and must not be described as real-world failure frequencies.
-
-A possible future approach is to estimate priors from an appropriately labeled historical dataset, if a suitable dataset can be obtained and mapped reliably to the project's hidden-state categories.
-
-Historical data should not be treated as ground truth merely because it exists. Its source, labeling method, representativeness, and label mapping must be documented.
-
-## 19. Action Costs — Initial Hypothesis
-
-The following are **qualitative initial assumptions**, not measured costs. They will be validated or changed through practitioner feedback and experiments.
-
-| Diagnostic action | Relative cost / risk | Why |
-|---|---|---|
-| Inspect logs | Low | Usually available from the failed CI run and does not require another execution. |
-| Check service availability | Low | A health/status check is generally cheaper than rerunning the integration test. |
-| Check DB availability | Low–Medium | Usually a relatively cheap check, but may require access to the relevant environment. |
-| Inspect code change | Medium | Requires examining the relevant diff and understanding its relationship to the failing test. |
-| Compare builds / history | Low–Medium | Requires retrieving and comparing previous build information. |
-| Search historical failures | Low–Medium | Requires finding and assessing whether previous failures are genuinely comparable. |
-| Inspect DB / test data | Medium | Requires access to the relevant data and interpretation of the state that caused the assertion. |
-| Rerun integration test | Medium–High | Consumes CI time and compute resources and may still provide ambiguous evidence. |
-| Human review | High delay / context-switch cost | Can be slower, but may be safer when evidence remains insufficient or the potential impact is high. |
-| Automatic revert | High risk | Can change production/development state incorrectly; therefore excluded from the initial agent. |
-
-These are qualitative assumptions requiring practitioner feedback and/or experiment.
-
-## 20. Human Reasoning Function
-
-The initial human-reasoning function is:
-
-> **Compare the current failure with relevant historical/previous cases and use the comparison as evidence.**
-
-This does not attempt to reproduce all human debugging ability.
-
-The project will investigate whether this historical comparison improves diagnostic action selection.
-
-## 21. Planned Experiment
-
-The experiment will evaluate whether the agent chooses useful next diagnostic actions under incomplete information.
-
-### Required evaluation structure
-
-- 30–50 labeled or simulated cases;
-- at least two agent policies;
-- at least one baseline;
-- saved predictions/actions;
-- confusion matrix and applicable metrics;
-- examination of at least five incorrect decisions;
-- named failure condition for each relevant error type;
-- identification of the highest-cost error.
-
-### Candidate policies
-
-#### P0 — Fixed-sequence baseline
-
-```text
-logs
-  ↓
-dependency checks
-  ↓
-code
-  ↓
-previous/last-green build
-  ↓
-DB/data
-  ↓
-history/rerun
-  ↓
-human
-```
-
-#### P1 — Evidence-driven policy
-
-Choose the next diagnostic action from the current evidence/belief state rather than always following the fixed sequence.
-
-#### P2 — Historical-aware policy
-
-Use comparable historical failures as an additional evidence source when choosing the next diagnostic action.
-
-The final policy set will be kept small enough to remain understandable and reproducible.
-
-## 22. Probability Decision Record
-
-A separate record will be created for an uncertain case containing:
-
-- observed evidence;
-- hidden states;
-- prior beliefs;
-- new evidence;
-- likelihood estimates;
-- updated belief;
-- decision threshold;
-- selected action;
-- action/error costs;
-- audit/version information.
-
-No final numerical example will be claimed until it is actually calculated or simulated.
-
-## 23. Current Limitations
-
-- Human Reddit/X discussions are incomplete.
-- The current research is not sufficient to validate the action ordering.
-- Probability values are not calibrated.
-- The hypothesis set may be incomplete.
-- Historical comparability criteria are not validated.
-- No suitable historical dataset has yet been selected for this project.
-- No 30–50-case experiment has been executed.
-- No baseline/policy comparison has been executed.
-- No confusion matrix exists yet.
-- No final architecture exists yet.
-
-## 24. Next Steps
-
-1. Continue actual Reddit discussions.
-2. Complete the required community participation.
-3. Research X discussions.
-4. Record practitioner responses and how they change the design.
-5. Investigate available historical CI datasets and their provenance/labels.
-6. Decide whether historical data can support priors or only case retrieval.
-7. Refine hidden states, evidence, actions, costs and historical comparability.
-8. Define two policies and a baseline.
-9. Create 30–50 labeled/simulated cases.
-10. Implement the smallest testable agent.
-11. Run the experiment and save predictions/actions.
-12. Analyze at least five incorrect decisions.
-13. Create the probability decision record.
-14. Run the required AI reviews and record accepted/rejected comments.
-15. Create the `.dot` architecture.
-16. Write the LaTeX preprint.
-17. Compile and check the PDF.
-18. Publish only after the evidence is real and reproducible.
+All numerical probabilities, likelihoods, costs, consequence classes, and simulation results in this document are explicitly labeled as assumptions or simulation outputs unless independently measured. No practitioner comments or researcher interactions are fabricated. Production conclusions require independent empirical validation.
