@@ -5,10 +5,13 @@ The threshold is varied without changing the underlying cases.
 """
 
 from statistics import mean
+import sys
+from pathlib import Path
 
-from src.shared_case_experiment import generate_cases, run_policy, summarize, SEEDS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-NUM_CASES = 120
+from experiments.shared_case_experiment import generate_cases, run_policy, summarize, SEEDS
+
 THRESHOLDS = (0.60, 0.70, 0.80)
 
 
