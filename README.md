@@ -2,85 +2,64 @@
 
 An uncertainty-aware agent for diagnosing CI integration-test failures under incomplete information.
 
-## Week 1 status
+## Current Week 1 status
 
-**Research + prototype evaluation completed for v0.1.**
+The repository now contains the simulator, Bayesian belief engine, P0/P2/P3 policies, fair shared-case experiment, sensitivity harness, architecture diagram, probability decision record, extension analysis, error-analysis protocol, AI-review audit, and LaTeX preprint draft.
 
-This repository documents the work completed during the Week 1 research process:
+The cohort framing treats the failure cause as hidden, evidence as observable signals, and diagnosis as sequential information gathering. The research notes explicitly warn against treating a passing rerun as proof of flakiness, a recent code change as proof of causality, or heuristic scores as calibrated probabilities.
 
-- Problem framed as hidden-state diagnosis under incomplete evidence.
-- Competing failure hypotheses defined.
-- Prior, likelihood, posterior, entropy, information gain and EIG/cost reasoning worked through.
-- Relative diagnostic costs defined as explicit simulation assumptions.
-- **P0:** fixed-sequence baseline.
-- **P1:** evidence-driven policy that selects the next action from the current belief state using expected information gain relative to assumed cost.
-- 48 simulated cases used for the v0.1 comparison.
-- Policy decisions/predictions and evaluation metrics recorded.
-- Five P1 non-correct outcomes reviewed, distinguishing escalation from incorrect diagnosis.
-- Probability Decision Record created for a representative belief-update path.
+## Policies
 
-## Key v0.1 result
+- **P0:** fixed diagnostic sequence baseline.
+- **P2:** threshold policy; update beliefs and commit when the leading hypothesis reaches a configured threshold.
+- **P3:** value-of-information proxy; select the unused action with highest expected information gain per unit diagnostic cost.
 
-Under the current simulation assumptions:
+Historical failure comparison is retained as an extension because the research process promoted historical evidence to a first-class evidence source.
 
-| Metric | P0 — Fixed sequence | P1 — Evidence driven |
-|---|---:|---:|
-| Cases | 48 | 48 |
-| Correct diagnoses | 5 | 13 |
-| Accuracy | 10.4% | 27.1% |
-| Escalations | 35 | 29 |
-| Escalation rate | 72.9% | 60.4% |
-| Average relative diagnostic cost | 13.96 | 11.42 |
-| Average actions | 5.50 | 4.94 |
+## Probability model
 
-These are **simulation results only**. The priors, likelihoods, relative costs, observation model and stopping threshold are prototype assumptions and are not calibrated real-world measurements.
+The simulation prior is 40% code regression, 30% flaky test, 10% external dependency, 10% CI infrastructure, 5% test-data/state, and 5% other. These are explicit simulation assumptions, not measured real-world frequencies.
 
-## Important finding
+Qualitative likelihood assumptions are mapped to 0.8 (often), 0.4 (sometimes), and 0.1 (rarely). Relative diagnostic costs are 1 for cheap automated checks and 2 for heavier diagnostics; human review/intervention are consequence classes of 8/9.
 
-P1 performed better than P0 across the measured metrics in this v0.1 simulation, but its evidence model poorly distinguished several hidden states. P1 correctly diagnosed 6/8 code-regression cases and 7/8 flaky-test cases, while it correctly diagnosed 0/8 cases for external dependency, CI infrastructure, test-data/state and other.
+## Experiment
 
-This limitation is retained as a research finding rather than hidden through post-hoc tuning.
+The fair experiment generates 120 cases for each fixed seed (2026–2030), pre-generates the observation opportunity for every action, and evaluates P0/P2/P3 on the same cases. The experiment saves case-level predictions and action sequences under `results/generated/` when executed.
 
-## Core concepts
+Threshold sensitivity is evaluated at 60%, 70%, and 80%. The threshold is a tunable simulation parameter, not a universal empirical value.
 
-### P0 — fixed sequence
+## Reproducibility
 
-P0 follows a predetermined diagnostic sequence regardless of the current evidence.
+Run locally:
 
-### P1 — evidence driven
+```bash
+PYTHONPATH=. python experiments/test_simulator.py
+PYTHONPATH=. python experiments/test_belief_engine.py
+PYTHONPATH=. python experiments/test_failed_rerun.py
+PYTHONPATH=. python experiments/test_information_gain.py
+PYTHONPATH=. python experiments/shared_case_experiment.py
+PYTHONPATH=. python experiments/sensitivity_analysis.py
+```
 
-P1 asks what diagnostic action is most useful **given what is currently known**. It updates its belief after each observation and uses expected information gain relative to assumed action cost when selecting the next action.
+GitHub Actions runs the same checks and uploads case-level output as an artifact.
 
-### Probability model
+## Research artifacts
 
-The prototype uses:
+- `docs/architecture.dot`
+- `docs/probability_decision_record.md`
+- `docs/extension_concepts.md`
+- `docs/error_analysis.md`
+- `docs/ai_review_log.md`
+- `docs/rubric_audit.md`
+- `paper/preprint.tex`
+- `notebooks/experiment_results.ipynb`
+- `experiments/shared_case_experiment.py`
+- `experiments/sensitivity_analysis.py`
 
-`prior → evidence/likelihood → posterior → entropy → information gain → action selection`
+## Important submission discipline
 
-The numerical values are explicitly treated as assumptions for simulation, not real-world failure frequencies.
+Do not treat the existing notebook/result tables as final empirical evidence until the current GitHub Actions run succeeds and its case-level artifact has been inspected. The final paper must include the actual confusion matrix, at least five case-level error analyses, highest-cost error, and completed AI-review record.
 
-## Reproducibility artifacts
+## AI use
 
-The following artifacts are intended to document the completed work:
-
-- `research/research-file.md` — research framing and hypotheses.
-- `decisions/probability-decision-record.md` — representative probability decision record.
-- `data/ci_diagnosis_experiment_48_cases.csv` — 48-case experiment records.
-- `results/ci_diagnosis_results_summary_v0_1.md` — experiment results and error analysis.
-
-## Limitations
-
-- The experiment uses simulated rather than production-labeled CI failures.
-- Probability values are illustrative and not calibrated.
-- Relative action costs are qualitative assumptions, not measured money/time costs.
-- The historical evidence model has not yet been validated against a suitable historical dataset.
-- The 80% confidence threshold is a prototype parameter.
-- P2, a separate historical-aware policy, is not claimed as completed in v0.1.
-
-## AI-assisted workflow
-
-AI assistance was used for research structuring, conceptual explanation, implementation assistance, simulation, calculation, review and drafting. The researcher made the problem/design judgments, challenged assumptions, reviewed the calculations and decided what claims could be made. Unverified claims and simulated results are explicitly labeled rather than presented as established real-world findings.
-
-## Next work
-
-The next phase is packaging and reproducibility: finalize the research record, probability decision record, experiment artifacts, results discussion and paper. Future work may validate the likelihood/cost model with practitioner or labeled CI evidence and separately evaluate the historical-aware P2 policy.
+AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, implementation assistance, reasoning checks, simulation support, and document structuring. The researcher made the project/design judgments and should retain the distinction between personal decisions, external evidence, and AI-assisted implementation.
