@@ -10,19 +10,21 @@ def test_rerun_passed_matches_worked_example():
         beliefs, Action.RERUN, positive=True
     )
 
+    # P(RERUN=PASSED | cause) comes from the likelihood assumptions
+    # recorded in src/simulator.py.
     expected = {
-        Cause.CODE_REGRESSION: 0.1111111111,
-        Cause.FLAKY_TEST: 0.6666666667,
-        Cause.EXTERNAL_DEPENDENCY: 0.1111111111,
-        Cause.CI_INFRASTRUCTURE: 0.0277777778,
-        Cause.TEST_DATA_STATE: 0.0069444444,
-        Cause.OTHER: 0.0069444444,
+        Cause.CODE_REGRESSION: 0.3478260870,
+        Cause.FLAKY_TEST: 0.5217391304,
+        Cause.EXTERNAL_DEPENDENCY: 0.0869565217,
+        Cause.CI_INFRASTRUCTURE: 0.0217391304,
+        Cause.TEST_DATA_STATE: 0.0108695652,
+        Cause.OTHER: 0.0108695652,
     }
 
     for cause, value in expected.items():
         assert isclose(posterior[cause], value, rel_tol=1e-9, abs_tol=1e-9)
 
-    assert isclose(entropy(posterior), 1.5638, rel_tol=1e-3)
+    assert isclose(entropy(posterior), 1.7345, rel_tol=1e-3)
 
 
 if __name__ == "__main__":
