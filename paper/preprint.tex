@@ -90,7 +90,13 @@ Two extensions beyond the supplied information-theory ladder are used: value of 
 The simulated priors and likelihoods are not calibrated to a production CI dataset. The six causes may be incomplete. Historical failure comparability is not validated. A single passing rerun does not establish flakiness. Community discussion is treated as practitioner evidence, not scientific ground truth. The experiment therefore supports claims about the behavior of the simulated policies under stated assumptions, not general claims about real CI systems or production ROI.
 
 \section{AI use and provenance}
-AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, implementation support, reasoning checks, simulation support, and document structuring. The user's project decisions remain the source of the selected causes, priors, qualitative evidence assumptions, operational response boundaries, and research direction. The AI review log records accepted and rejected review comments and explicitly rejects unsupported claims.
+AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, reasoning checks, implementation support, simulation support, and document structuring. The user's project decisions remain the source of the selected causes, priors, qualitative evidence assumptions, operational response boundaries, and research direction. The AI review log records accepted and rejected review comments and explicitly rejects unsupported claims.
+
+\section{Selected references}
+\begin{itemize}
+\item Athey, S., and Levin, J. \emph{The Value of Information in Monotone Decision Problems}. Research in Economics, 72(1), 101--116.
+\item What is the Vocabulary of Flaky Tests? An Extended Replication. IEEE conference publication, 2021.
+\end{itemize}
 
 \section{Reproducibility}
 The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, Jupyter notebook, error analysis, and final result summary. GitHub Actions validates the model checks and regenerates the experiment and case-level evidence from fixed seeds.
