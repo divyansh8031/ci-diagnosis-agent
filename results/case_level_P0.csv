@@ -1,0 +1,2 @@
+seed,case_id,policy,true_cause,predicted_cause,confidence,correct,decision_cost,actions,action_sequence,observations,escalated
+2026,2026-1,P0,flaky_test,flaky_test,0.6666666667,True,9,6,rerun>search_history>check_dependency>local_reproduction>inspect_code>check_db,rerun=PASS;search_history=PASS;check_dependency=FAIL;local_reproduction=FAIL;inspect_code=FAIL;check_db=FAIL,False
