@@ -2,16 +2,17 @@
 
 Each case pre-generates a hidden cause and one observation outcome for every
 available diagnostic action. Every policy therefore sees the same evidence
-opportunities, removing the random-stream bias that occurs when policies
-consume different numbers of random draws.
+opportunities, removing random-stream bias.
 """
 
 from dataclasses import dataclass
 from statistics import mean
+import csv
+from pathlib import Path
 
 from src.belief_engine import initial_beliefs, posterior_after_observation
 from src.policies import PolicyState, p2_decision, p3_decision
-from src.simulator import ACTION_COSTS, Action, Cause, LIKELIHOODS, PRIORS, Simulator
+from src.simulator import ACTION_COSTS, Action, Cause, LIKELIHOODS, Simulator
 
 NUM_CASES = 120
 SEEDS = (2026, 2027, 2028, 2029, 2030)
@@ -19,6 +20,7 @@ SEEDS = (2026, 2027, 2028, 2029, 2030)
 
 @dataclass(frozen=True)
 class SharedCase:
+    case_id: str
     true_cause: Cause
     observations: dict
 
@@ -26,13 +28,13 @@ class SharedCase:
 def generate_cases(seed):
     simulator = Simulator(seed=seed)
     cases = []
-    for _ in range(NUM_CASES):
+    for index in range(NUM_CASES):
         case = simulator.new_case()
         observations = {}
         for action in Action:
             p = LIKELIHOODS[action][case.true_cause]
             observations[action] = simulator.random.random() < p
-        cases.append(SharedCase(case.true_cause, observations))
+        cases.append(SharedCase(f"{seed}-{index + 1}", case.true_cause, observations))
     return cases
 
 
@@ -62,32 +64,58 @@ def run_policy(cases, policy_name, threshold=0.70):
             else:
                 raise ValueError(policy_name)
 
-            beliefs = posterior_after_observation(
-                beliefs, action, case.observations[action]
-            )
+            beliefs = posterior_after_observation(beliefs, action, case.observations[action])
             actions.append(action)
             cost += ACTION_COSTS[action]
+
         predicted = max(beliefs, key=beliefs.get)
         escalated = predicted in {Cause.TEST_DATA_STATE, Cause.OTHER}
-        results.append((predicted == case.true_cause, cost, len(actions), escalated))
+        results.append({
+            "case_id": case.case_id,
+            "true_cause": case.true_cause.value,
+            "predicted_cause": predicted.value,
+            "correct": predicted == case.true_cause,
+            "cost": cost,
+            "actions": len(actions),
+            "action_sequence": ">".join(a.value for a in actions),
+            "escalated": escalated,
+        })
     return results
 
 
 def summarize(results):
     return {
-        "accuracy": mean(r[0] for r in results),
-        "mean_diagnostic_cost": mean(r[1] for r in results),
-        "mean_diagnostic_actions": mean(r[2] for r in results),
-        "escalation_rate": mean(r[3] for r in results),
+        "accuracy": mean(r["correct"] for r in results),
+        "mean_diagnostic_cost": mean(r["cost"] for r in results),
+        "mean_diagnostic_actions": mean(r["actions"] for r in results),
+        "escalation_rate": mean(r["escalated"] for r in results),
     }
 
 
-def run_all(threshold=0.70):
+def save_case_level(results, path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(results[0]))
+        writer.writeheader()
+        writer.writerows(results)
+
+
+def confusion_matrix(results):
+    causes = [c.value for c in Cause]
+    matrix = {actual: {pred: 0 for pred in causes} for actual in causes}
+    for row in results:
+        matrix[row["true_cause"]][row["predicted_cause"]] += 1
+    return matrix
+
+
+def run_all(threshold=0.70, output_dir="results/generated"):
     output = {}
     for seed in SEEDS:
         cases = generate_cases(seed)
         for policy in ("P0", "P2", "P3"):
-            output[(seed, policy)] = summarize(run_policy(cases, policy, threshold))
+            results = run_policy(cases, policy, threshold)
+            output[(seed, policy)] = summarize(results)
+            save_case_level(results, Path(output_dir) / f"cases_{seed}_{policy}.csv")
     return output
 
 
