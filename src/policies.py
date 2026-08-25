@@ -11,7 +11,6 @@ class PolicyState:
     diagnostic_cost: int = 0
 
 
-# Cause-specific terminal responses defined during the research process.
 CAUSE_RESPONSES = {
     Cause.FLAKY_TEST: "rerun",
     Cause.CODE_REGRESSION: "prepare_revert_pr_for_human_review",
@@ -21,12 +20,11 @@ CAUSE_RESPONSES = {
     Cause.OTHER: "human_escalation",
 }
 
-
-# P2: evidence-driven threshold policy.
-# This is intentionally simple and interpretable. It commits to a cause-specific
-# response once the leading posterior reaches the threshold; otherwise it asks
-# a predefined diagnostic question.
+# Operational commitment threshold used by both adaptive policies. It is a
+# v0.1 parameter and must be stress-tested/tuned in the final experiment;
+# it is not claimed to be an empirical universal threshold.
 P2_THRESHOLD = 0.70
+P3_THRESHOLD = P2_THRESHOLD
 
 P2_ACTION_ORDER = [
     Action.RERUN,
@@ -47,17 +45,21 @@ def update_state(state: PolicyState, action: Action, positive: bool):
     return state
 
 
+def _terminal(cause, confidence):
+    return {
+        "type": "terminal",
+        "cause": cause,
+        "confidence": confidence,
+        "response": CAUSE_RESPONSES[cause],
+    }
+
+
 def p2_decision(state: PolicyState):
     cause = most_likely_cause(state.beliefs)
     confidence = state.beliefs[cause]
 
     if confidence >= P2_THRESHOLD:
-        return {
-            "type": "terminal",
-            "cause": cause,
-            "confidence": confidence,
-            "response": CAUSE_RESPONSES[cause],
-        }
+        return _terminal(cause, confidence)
 
     for action in P2_ACTION_ORDER:
         if action not in state.actions_taken:
@@ -68,31 +70,27 @@ def p2_decision(state: PolicyState):
                 "confidence": confidence,
             }
 
-    return {
-        "type": "terminal",
-        "cause": cause,
-        "confidence": confidence,
-        "response": CAUSE_RESPONSES[cause],
-    }
+    return _terminal(cause, confidence)
 
 
-# P3: choose the unused action with the highest expected information gain per
-# unit diagnostic cost. If no unused action has positive value, stop.
 def p3_decision(state: PolicyState):
-    candidates = [
-        action
-        for action in Action
-        if action not in state.actions_taken
-    ]
+    """Choose the unused action with maximum EIG per diagnostic cost.
 
+    P3 uses the same explicit commitment threshold as P2 so the comparison
+    isolates the value of adaptive action selection rather than silently
+    changing the stopping criterion.
+    """
+    cause = most_likely_cause(state.beliefs)
+    confidence = state.beliefs[cause]
+
+    if confidence >= P3_THRESHOLD:
+        return _terminal(cause, confidence)
+
+    candidates = [
+        action for action in Action if action not in state.actions_taken
+    ]
     if not candidates:
-        cause = most_likely_cause(state.beliefs)
-        return {
-            "type": "terminal",
-            "cause": cause,
-            "confidence": state.beliefs[cause],
-            "response": CAUSE_RESPONSES[cause],
-        }
+        return _terminal(cause, confidence)
 
     scores = {
         action: information_gain(state.beliefs, action) / ACTION_COSTS[action]
@@ -100,20 +98,11 @@ def p3_decision(state: PolicyState):
     }
     best_action = max(scores, key=scores.get)
 
-    if scores[best_action] <= 0:
-        cause = most_likely_cause(state.beliefs)
-        return {
-            "type": "terminal",
-            "cause": cause,
-            "confidence": state.beliefs[cause],
-            "response": CAUSE_RESPONSES[cause],
-        }
-
     return {
         "type": "diagnostic",
         "action": best_action,
         "score": scores[best_action],
-        "cause": most_likely_cause(state.beliefs),
-        "confidence": state.beliefs[most_likely_cause(state.beliefs)],
+        "cause": cause,
+        "confidence": confidence,
         "scores": scores,
     }
