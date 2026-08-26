@@ -1,48 +1,69 @@
 # Final Week 1 experiment results
 
-These values come from the GitHub Actions run on commit `eefde21978a47e4bcab61290fbc49304304c9439` using 5 fixed seeds (2026–2030), 120 cases per seed, and identical pre-generated observation opportunities for P0/P2/P3.
+These values come from the verified GitHub Actions run on commit `069368ccf784518c00c343df08af6cc139372da9` using 5 fixed seeds (2026–2030), 120 cases per seed, and identical pre-generated observation opportunities for P0/P2/P3.
 
-## Main comparison at 70% threshold
+## Main comparison at derived 47.06% threshold
+
+The threshold is derived from `p* = C_FP / (C_FP + C_FN) = 80 / (80 + 90) = 47.06%`.
 
 | Policy | Accuracy | Mean diagnostic cost | Mean decision cost | Mean actions | Escalation |
 |---|---:|---:|---:|---:|---:|
-| P0 fixed sequence | 75.83% | 9.00 | 14.25 | 6.00 | 65.67% |
-| P2 threshold | 71.00% | 5.83 | 10.75 | 4.28 | 61.50% |
-| P3 EIG/cost | 73.17% | 5.36 | 10.63 | 3.64 | 65.83% |
+| P0 no-evidence baseline | 39.17% | 0.00 | 60.88 | 0.00 | 100.00% |
+| P2 derived threshold | 58.00% | 3.04 | 46.17 | 2.46 | 52.50% |
+| P3 EIG/cost + decision-value stop | 51.50% | 1.56 | 48.13 | 1.56 | 56.00% |
 
-P3 reduces mean diagnostic cost by about 40.4% relative to P0 and mean diagnostic actions by about 39.3%, while losing 2.67 percentage points of accuracy. P2 is cheaper than P0 but loses more accuracy.
+At the derived threshold, P2 improves accuracy by 18.83 percentage points over the trivial baseline and reduces mean decision cost by about 24.2%. P3 uses substantially fewer checks than P2 but gives up accuracy at this low threshold and has slightly higher decision cost than P2.
 
-Mean decision cost includes diagnostic cost plus the simulated human-consequence class: 0 for an automated flaky-test rerun, 8 for human review/intervention classes, and 9 for the `other`/highest-consequence class. These consequence assignments are explicit simulation assumptions, not production monetary values.
+This is a deliberately non-cherry-picked result: P3 is not claimed to be universally superior.
 
 ## Threshold sensitivity
 
 | Threshold | Policy | Accuracy | Mean diagnostic cost | Mean decision cost | Mean actions |
 |---:|---|---:|---:|---:|---:|
-| 60% | P2 | 66.17% | 4.53 | 10.03 | 3.63 |
-| 60% | P3 | 72.50% | 4.60 | 9.86 | 3.19 |
-| 70% | P2 | 71.00% | 5.83 | 10.75 | 4.28 |
-| 70% | P3 | 73.17% | 5.36 | 10.63 | 3.64 |
-| 80% | P2 | 75.17% | 6.75 | 11.98 | 4.88 |
-| 80% | P3 | 74.50% | 6.09 | 11.51 | 4.19 |
+| 40% | P2 | 39.17% | 0.00 | 60.88 | 0.00 |
+| 40% | P3 | 39.17% | 0.00 | 60.88 | 0.00 |
+| 47.06% | P2 | 58.00% | 3.04 | 46.17 | 2.46 |
+| 47.06% | P3 | 51.50% | 1.56 | 48.13 | 1.56 |
+| 55% | P2 | 63.67% | 4.01 | 45.76 | 3.28 |
+| 55% | P3 | 61.33% | 3.61 | 44.20 | 2.70 |
+| 60% | P2 | 66.17% | 4.53 | 44.24 | 3.63 |
+| 60% | P3 | **72.83%** | 4.49 | **39.78** | 3.14 |
+| 70% | P2 | 71.00% | 5.83 | 41.70 | 4.28 |
+| 70% | P3 | **73.50%** | 4.57 | **39.42** | 3.18 |
+| 80% | P2 | **75.17%** | 6.75 | 40.48 | 4.88 |
+| 80% | P3 | 73.50% | 4.57 | 39.42 | 3.18 |
 
-Interpretation: P3 is not universally dominant. At 60% and 70% it has lower decision cost and higher accuracy than P2; at 80%, P2 has slightly higher accuracy while P3 remains cheaper. The defensible conclusion is an efficiency/accuracy trade-off, not universal superiority.
+The defensible interpretation is an efficiency/accuracy frontier, not universal P3 dominance. P3 becomes particularly effective around 60–70%, while P2 reaches higher accuracy at 80%.
+
+## Failure-driven re-test
+
+The error analysis identified a case where a positive DB observation could overpower competing explanations. A controlled re-test made DB evidence more discriminative against flaky tests, external dependencies, and CI infrastructure while leaving the test-data likelihood unchanged.
+
+| Policy | Baseline accuracy @60% | Re-test accuracy @60% | Baseline decision cost | Re-test decision cost |
+|---|---:|---:|---:|---:|
+| P2 | 66.17% | **66.33%** | 44.24 | **44.14** |
+| P3 | 72.83% | **73.00%** | 39.78 | **39.69** |
+
+The effect is intentionally reported as small. It shows that changing one likelihood assumption does not solve the broader calibration/unknown-state problem.
 
 ## Error-analysis cases
 
-The executable experiment produced 1,800 policy-case records. Five representative incorrect decisions are recorded below; the complete case-level artifact is retained in the GitHub Actions run.
+The executable experiment produced 1,800 policy-case records. Five representative incorrect decisions from the verified artifact are:
 
-1. **P3, seed 2026, case 2026-12:** true `flaky_test`, predicted `test_data_state`, confidence 38.20%, decision cost 17. Evidence: history FAIL, dependency FAIL, local reproduction FAIL, rerun PASS, code inspection FAIL, DB PASS. Failure condition: the current likelihood model makes the combination of later evidence outweigh a single positive rerun. Design implication: repeated-history evidence and stronger calibration for state checks should be tested.
-2. **P2, seed 2029, case 2029-5:** true `test_data_state`, predicted `external_dependency`, confidence 46.32%, decision cost 17. Evidence: rerun FAIL, history FAIL, dependency PASS, local reproduction FAIL, code inspection FAIL, DB PASS. Failure condition: a positive dependency signal competes with a positive DB signal. Design implication: make the DB/state observation more discriminative when test-data is suspected.
-3. **P2, seed 2028, case 2028-75:** true `external_dependency`, predicted `test_data_state`, confidence 68.56%, decision cost 17. Evidence: rerun FAIL, history FAIL, dependency FAIL, local reproduction FAIL, code inspection FAIL, DB PASS. Failure condition: the model overweights the DB observation after several negative signals. Design implication: add service-health persistence/availability evidence rather than relying on one binary dependency check.
-4. **P0, seed 2026, case 2026-52:** true `ci_infrastructure`, predicted `code_regression`, confidence 62.98%, decision cost 17. Evidence: rerun FAIL, history FAIL, dependency FAIL, local reproduction FAIL, code inspection PASS, DB FAIL. Failure condition: P0 keeps executing the full sequence even when infrastructure evidence is already plausible. Design implication: an adaptive policy should prioritize infrastructure-specific checks when runner/package/container evidence appears.
-5. **P0, seed 2026, case 2026-16:** true `other`, predicted `code_regression`, confidence 62.98%, decision cost 17. Evidence: rerun FAIL, history FAIL, dependency FAIL, local reproduction PASS, code inspection FAIL, DB FAIL. Failure condition: the model is forced to choose a known cause when evidence does not support any cause strongly. Design implication: add an explicit abstention/unknown decision state.
+1. **P2, seed 2026, case 2026-28:** true `other`, predicted `test_data_state`, confidence 68.56%, decision cost 99. Six checks were run; DB was positive after all other checks were negative.
+2. **P3, seed 2026, case 2026-16:** true `other`, predicted `code_regression`, confidence 50.00%, decision cost 92. The derived threshold allowed a terminal decision despite weak separation.
+3. **P0, seed 2026, case 2026-16:** true `other`, predicted `code_regression`, confidence 40.00%, decision cost 90. No evidence was collected by design.
+4. **P2, seed 2026, case 2026-77:** true `test_data_state`, predicted `ci_infrastructure`, confidence 51.39%, decision cost 89. All six observations were negative.
+5. **P2, seed 2027, case 2027-37:** true `code_regression`, predicted `ci_infrastructure`, confidence 51.39%, decision cost 89. All six observations were negative.
 
 ## Highest-cost error
 
-The maximum observed decision cost is **17**, with ties among multiple incorrect cases. One representative highest-cost case is P0 / seed 2026 / case 2026-12. The important finding is not that this particular case is uniquely worst; it is that incorrect decisions requiring human review can dominate total decision cost.
+The verified highest-cost selected error is **P2 / seed 2026 / case 2026-28**, with total decision cost **99**. It is a true `other` case predicted as `test_data_state` at 68.56% confidence.
 
 ## Reproducibility
 
-The validation workflow passed simulator, Bayesian-update, failed-rerun, and information-gain checks, then generated the shared-case experiment, sensitivity analysis, case-level records, confusion matrices, five-error selection, and highest-cost-error record. The artifact is `ci-diagnosis-final-evidence` from the final-evidence GitHub Actions run.
+The validation workflow passed simulator, Bayesian-update, failed-rerun, information-gain, and policy checks. The experiment generated shared-case results, threshold sensitivity, confusion matrices, case-level records, five representative errors, and the highest-cost error.
 
-These are simulation results under explicit priors, likelihoods, action costs, and consequence classes. They are not estimates of real-world CI failure frequencies or production ROI.
+The GitHub Actions artifact is `ci-diagnosis-final-evidence` from the verified final-evidence run.
+
+These are simulation results under explicit priors, likelihoods, diagnostic costs, and response-consequence assumptions. They are not estimates of real-world CI failure frequencies or production ROI.
