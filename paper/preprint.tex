@@ -43,7 +43,47 @@ Other & 0.05\\
 \end{center}
 These are model assumptions, not measured population frequencies. Qualitative evidence assumptions are mapped to 0.8 (often), 0.4 (sometimes), and 0.1 (rarely). Bayesian updating makes the decision record explicit and reproducible.
 
-After \texttt{RERUN=PASSED}, the model gives approximately 52.17\% probability to the flaky-test hypothesis and 34.78\% to code regression. After \texttt{RERUN=FAILED}, the corresponding values are approximately 11.11\% and 44.44\%. A rerun changes belief; it does not prove a root cause.
+For a positive diagnostic observation, the current likelihood model is:
+\begin{center}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Action & Code & Flaky & Dep. & CI & Data & Other\\
+\midrule
+Rerun & .4 & .8 & .4 & .1 & .1 & .1\\
+Search history & .4 & .8 & .1 & .1 & .1 & .1\\
+Check dependency & .1 & .4 & .8 & .1 & .1 & .1\\
+Local reproduction & .8 & .1 & .1 & .1 & .1 & .1\\
+Inspect code & .8 & .1 & .1 & .1 & .1 & .1\\
+Check DB & .1 & .1 & .1 & .1 & .8 & .1\\
+\bottomrule
+\end{tabular}
+\end{center}
+These likelihoods are simulation assumptions and are not calibrated production probabilities.
+
+\subsection{Bayesian update example}
+After observing evidence $E$, the agent updates using
+\[
+P(H\mid E)=\frac{P(E\mid H)P(H)}{P(E)}.
+\]
+For example, after \texttt{RERUN=PASSED}, the evidence probability is 0.46 and the posterior is approximately 52.17\% flaky-test, 34.78\% code-regression, 8.70\% external-dependency, 2.17\% CI-infrastructure, 1.09\% test-data/state, and 1.09\% other. After \texttt{RERUN=FAILED}, the corresponding values are approximately 44.44\%, 11.11\%, 11.11\%, 16.67\%, 8.33\%, and 8.33\%. A rerun changes belief; it does not prove a root cause.
+
+\subsection{Entropy and information gain}
+Uncertainty is measured using Shannon entropy:
+\[
+H(P)=-\sum_i p_i\log_2(p_i).
+\]
+For the initial prior, $H(P)=2.1464$ bits. After \texttt{RERUN=PASS}, entropy is 1.5879 bits, giving outcome-specific information gain of $2.1464-1.5879=0.5585$ bits.
+
+Expected information gain is calculated before an action because its outcome is unknown. For the rerun, $P(PASS)=0.46$ and $P(FAIL)=0.54$. With $H(PASS)=1.5879$ and $H(FAIL)=2.2527$,
+\[
+E[H]=0.46(1.5879)+0.54(2.2527)=1.9469,
+\]
+so
+\[
+EIG=2.1464-1.9469=0.1995\text{ bits}.
+\]
+Thus outcome-specific information gain and expected information gain are distinct: the first is computed after observing an outcome, while the second guides action selection before observing it.
 
 \section{Costs and derived threshold}
 Diagnostic costs are 1 for cheap automated checks and 2 for heavier diagnostics. The response-consequence scale uses 80 units for the human-review/intervention class and 90 for the highest-consequence class. The absolute units are simulation units, not production money or minutes.
@@ -69,9 +109,11 @@ P2 updates beliefs after each observation and commits when the leading hypothesi
 P3 ranks unused diagnostic actions by expected information gain per unit diagnostic cost. It then applies a decision-value stop gate: a check is purchased only when its expected reduction in terminal consequence exceeds the check's cost. Thus entropy reduction is used for ranking, while decision consequence determines whether the information is worth buying.
 
 \section{Experiment}
-The executable experiment creates 120 cases for each fixed seed and pre-generates the potential observation for every action. All policies are evaluated on the same cases, preventing policies from receiving different hidden worlds merely because they consume different numbers of random draws. Seeds 2026--2030 are used for multi-seed analysis.
+Each simulated case represents one artificial CI-failure scenario. The simulator samples a hidden ground-truth cause from the stated prior distribution and generates potential diagnostic observations according to the likelihood model. The policy does not observe the hidden cause; it only observes evidence revealed by the diagnostic actions it selects.
 
-The final run therefore contains 600 cases per policy and 1,800 policy-case records across P0/P2/P3.
+We generate 120 such cases for each of five fixed random seeds (2026--2030), giving 600 cases per policy and 1,800 policy-case records across P0/P2/P3. Each policy receives the same pre-generated cases and observation opportunities, preventing a policy from receiving a different random world merely because it consumes a different number of random draws.
+
+These are evaluation cases, not an empirical dataset. Because they are generated from the assumed priors and likelihoods, they are not used to recalibrate those priors or likelihoods. Public CI datasets are instead recorded as a future empirical-calibration path.
 
 \section{Results}
 At the derived 47.06\% threshold, the verified experiment produced:
