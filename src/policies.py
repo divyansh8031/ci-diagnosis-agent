@@ -5,9 +5,8 @@ from .simulator import (
     ACTION_COSTS,
     Cause,
     DERIVED_DECISION_THRESHOLD,
-    HIGH_CONSEQUENCE_COST,
-    HUMAN_REVIEW_COST,
     LIKELIHOODS,
+    RESPONSE_COSTS,
     Action,
 )
 
@@ -29,7 +28,7 @@ CAUSE_RESPONSES = {
 }
 
 # Derived from the simulation's consequence costs:
-# p* = C_FP / (C_FP + C_FN) = 8 / (8 + 9) = 47.06%.
+# p* = C_FP / (C_FP + C_FN) = 80 / (80 + 90) = 47.06%.
 P2_THRESHOLD = DERIVED_DECISION_THRESHOLD
 P3_THRESHOLD = DERIVED_DECISION_THRESHOLD
 
@@ -60,19 +59,11 @@ def _terminal(cause, confidence):
 
 
 def _terminal_loss(beliefs, predicted):
-    """Expected consequence of committing to one terminal diagnosis."""
-    total = 0.0
-    for true_cause, probability in beliefs.items():
-        if predicted == Cause.FLAKY_TEST:
-            consequence = 0 if true_cause == Cause.FLAKY_TEST else (
-                HIGH_CONSEQUENCE_COST if true_cause == Cause.OTHER else HUMAN_REVIEW_COST
-            )
-        elif predicted == Cause.OTHER:
-            consequence = HIGH_CONSEQUENCE_COST
-        else:
-            consequence = HUMAN_REVIEW_COST
-        total += probability * consequence
-    return total
+    """Expected response consequence of one terminal diagnosis."""
+    return sum(
+        probability * RESPONSE_COSTS[predicted][true_cause]
+        for true_cause, probability in beliefs.items()
+    )
 
 
 def _best_terminal_loss(beliefs):
@@ -84,8 +75,8 @@ def _best_terminal_loss(beliefs):
 def expected_decision_value(beliefs, action):
     """Expected reduction in terminal consequence from one more check.
 
-    This is decision value, not entropy reduction. It is zero when no possible
-    observation changes the best terminal decision.
+    This is decision value, not entropy reduction. If every possible result
+    leaves the same best terminal response, the value is zero.
     """
     current_loss, _ = _best_terminal_loss(beliefs)
     p_positive = sum(
@@ -118,8 +109,12 @@ def p2_decision(state: PolicyState, threshold=None):
 
     for action in P2_ACTION_ORDER:
         if action not in state.actions_taken:
-            return {"type": "diagnostic", "action": action,
-                    "cause": cause, "confidence": confidence}
+            return {
+                "type": "diagnostic",
+                "action": action,
+                "cause": cause,
+                "confidence": confidence,
+            }
 
     return _terminal(cause, confidence)
 
