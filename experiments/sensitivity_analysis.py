@@ -11,8 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from experiments.shared_case_experiment import generate_cases, run_policy, summarize, SEEDS
+from src.simulator import DERIVED_DECISION_THRESHOLD
 
-THRESHOLDS = (0.60, 0.70, 0.80)
+# The derived threshold is the center point. Lower/higher values test the
+# sensitivity of the policy rather than replacing the derivation.
+THRESHOLDS = (0.40, DERIVED_DECISION_THRESHOLD, 0.55, 0.70, 0.80)
 
 
 def run():
