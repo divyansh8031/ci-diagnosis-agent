@@ -12,11 +12,11 @@
 \maketitle
 
 \begin{abstract}
-We study a small decision-making agent for diagnosing integration-test failures in continuous integration (CI). The agent treats the true failure cause as hidden, maintains competing beliefs, selects diagnostic actions, updates beliefs after observations, and escalates when evidence is insufficient or intervention is required. The prototype compares a fixed baseline (P0), a threshold policy (P2), and an information-value policy (P3) in a reproducible simulated environment. Across five fixed seeds and 120 cases per seed, P3 reduced diagnostic effort relative to P0 while retaining competitive accuracy, but it did not universally dominate P2 across commitment thresholds. The results are simulation evidence under explicit assumptions, not estimates of real-world CI failure frequencies.
+We study a small uncertainty-aware agent for diagnosing integration-test failures in continuous integration (CI). The agent treats the true failure cause as hidden, maintains competing beliefs, selects diagnostic actions, updates beliefs after observations, and escalates when evidence is insufficient or intervention is required. The prototype compares a true no-evidence baseline (P0), a derived-threshold policy (P2), and an information-value policy (P3) in a reproducible simulated environment. The default decision threshold is derived from stated consequence costs rather than selected as a round confidence number. Across five fixed seeds and 120 cases per seed, P2 improves materially over the trivial baseline at the derived threshold, while P3 becomes particularly effective at higher thresholds where more evidence is available to buy. The results are simulation evidence under explicit assumptions, not estimates of real-world CI failure frequencies.
 \end{abstract}
 
 \section{Problem}
-CI failures can have multiple plausible causes: code regression, flaky tests, external dependencies, CI infrastructure, test-data/state, or an unknown/other category. A useful diagnostic agent should choose the next information-gathering action rather than immediately asserting a root cause. The research framing distinguishes observations from hidden causes and emphasizes traceable belief updates and human escalation.
+CI failures can have multiple plausible causes: code regression, flaky tests, external dependencies, CI infrastructure, test-data/state, or an unknown/other category. A useful diagnostic agent should choose the next information-gathering action rather than immediately asserting a root cause. The research framing distinguishes observations from hidden causes and emphasizes traceable belief updates, cost-aware investigation, and human escalation.
 
 \section{Research framing}
 The prototype follows the loop
@@ -45,60 +45,113 @@ These are model assumptions, not measured population frequencies. Qualitative ev
 
 After \texttt{RERUN=PASSED}, the model gives approximately 52.17\% probability to the flaky-test hypothesis and 34.78\% to code regression. After \texttt{RERUN=FAILED}, the corresponding values are approximately 11.11\% and 44.44\%. A rerun changes belief; it does not prove a root cause.
 
-\section{Costs and stopping}
-The simulator uses relative diagnostic costs of 1 for cheap automated checks and 2 for heavier diagnostics. Human review/intervention are represented by consequence classes of 8 and 9. These numbers are controlled simulation assumptions. Decision cost is treated as diagnostic cost plus the applicable simulated consequence class. The design also recognizes that information is valuable only when it can change the eventual action.
+\section{Costs and derived threshold}
+Diagnostic costs are 1 for cheap automated checks and 2 for heavier diagnostics. The response-consequence scale uses 80 units for the human-review/intervention class and 90 for the highest-consequence class. The absolute units are simulation units, not production money or minutes.
+
+The decision threshold is derived from the break-even equation
+\[
+p^* = \frac{C_{FP}}{C_{FP}+C_{FN}}
+\]
+with $C_{FP}=80$ and $C_{FN}=90$:
+\[
+p^* = \frac{80}{80+90}=0.470588\ldots=47.06\%.
+\]
+The threshold is therefore a consequence-derived simulation parameter, not an arbitrary 70\% confidence choice. Sensitivity analysis still varies it because the consequence costs themselves are assumptions.
 
 \section{Policies}
-\subsection{P0: fixed baseline}
-P0 executes the complete predefined diagnostic sequence without adapting to evidence. It is deliberately conservative and provides the fixed-sequence baseline.
+\subsection{P0: true no-evidence baseline}
+P0 performs no diagnostic check and always selects the modal prior cause, code regression at 40\%. This is the required trivial baseline for asking whether adaptive reasoning beats doing essentially nothing.
 
-\subsection{P2: threshold policy}
-P2 updates beliefs after each observation and commits when the leading hypothesis reaches the configured threshold. The default is 70\%, with sensitivity tests at 60\%, 70\%, and 80\%. The threshold is not claimed to be universally optimal.
+\subsection{P2: derived-threshold policy}
+P2 updates beliefs after each observation and commits when the leading hypothesis reaches the derived 47.06\% threshold. Otherwise it follows a fixed diagnostic order. Sensitivity analysis varies the threshold around the derived value.
 
-\subsection{P3: value of information proxy}
-P3 chooses the unused diagnostic action with maximum expected information gain per unit diagnostic cost. This is a tractable proxy for decision value, not a full expected-utility calculation. Value of perfect information (VPI) and value of sample information (VSI) are used as extensions to explain why raw entropy reduction is not identical to decision value.
+\subsection{P3: value of information plus decision-value stopping}
+P3 ranks unused diagnostic actions by expected information gain per unit diagnostic cost. It then applies a decision-value stop gate: a check is purchased only when its expected reduction in terminal consequence exceeds the check's cost. Thus entropy reduction is used for ranking, while decision consequence determines whether the information is worth buying.
 
 \section{Experiment}
 The executable experiment creates 120 cases for each fixed seed and pre-generates the potential observation for every action. All policies are evaluated on the same cases, preventing policies from receiving different hidden worlds merely because they consume different numbers of random draws. Seeds 2026--2030 are used for multi-seed analysis.
 
+The final run therefore contains 600 cases per policy and 1,800 policy-case records across P0/P2/P3.
+
 \section{Results}
-At the 70\% threshold, the verified experiment produced:
+At the derived 47.06\% threshold, the verified experiment produced:
 
 \begin{center}
 \begin{tabular}{lrrrr}
 \toprule
 Policy & Accuracy & Diagnostic cost & Decision cost & Actions\\
 \midrule
-P0 & 75.83\% & 9.00 & 14.25 & 6.00\\
-P2 & 71.00\% & 5.83 & 10.75 & 4.28\\
-P3 & 73.17\% & 5.36 & 10.63 & 3.64\\
+P0 & 39.17\% & 0.00 & 60.88 & 0.00\\
+P2 & 58.00\% & 3.04 & 46.17 & 2.46\\
+P3 & 51.50\% & 1.56 & 48.13 & 1.56\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Relative to P0, P3 reduces mean diagnostic cost by approximately 40.4\% and diagnostic actions by approximately 39.3\%, with a 2.67 percentage-point reduction in accuracy. P2 is cheaper than P0 but has lower accuracy than P3 at this threshold.
+At the derived threshold, P2 improves accuracy by 18.83 percentage points over P0 and reduces mean decision cost by approximately 24.2\%. P3 buys substantially fewer checks but gives up accuracy at this low threshold and has slightly higher decision cost than P2. This is an important negative result: P3 is not universally superior.
 
-Sensitivity analysis shows that at 60\% P3 has 72.50\% accuracy versus P2's 66.17\%; at 70\% P3 has 73.17\% versus 71.00\%; at 80\% P2 has 75.17\% versus P3's 74.50\%. Thus P3 is not universally superior: it provides a strong efficiency/accuracy trade-off under the current assumptions, while P2 can match or exceed it on accuracy at a higher threshold.
+Sensitivity analysis gives the following operating points:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Threshold & Policy & Accuracy & Decision cost & Actions\\
+\midrule
+47.06\% & P2 & 58.00\% & 46.17 & 2.46\\
+47.06\% & P3 & 51.50\% & 48.13 & 1.56\\
+55\% & P2 & 63.67\% & 45.76 & 3.28\\
+55\% & P3 & 61.33\% & 44.20 & 2.70\\
+60\% & P2 & 66.17\% & 44.24 & 3.63\\
+60\% & P3 & 72.83\% & 39.78 & 3.14\\
+70\% & P2 & 71.00\% & 41.70 & 4.28\\
+70\% & P3 & 73.50\% & 39.42 & 3.18\\
+80\% & P2 & 75.17\% & 40.48 & 4.88\\
+80\% & P3 & 73.50\% & 39.42 & 3.18\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The defensible conclusion is an efficiency/accuracy frontier, not universal P3 dominance. Around 60--70\%, P3 combines lower decision cost with competitive or higher accuracy; at 80\%, P2 has the higher accuracy while P3 remains cheaper and uses fewer checks.
 
 \section{Failure analysis}
-The verified run produced 1,800 policy-case records and five representative incorrect decisions were examined. Examples include P3 misclassifying a simulated flaky test as test-data/state, P2 confusing test-data/state with an external dependency, and P0 confusing CI infrastructure or an unknown cause with code regression. The maximum observed decision cost was 17, tied across multiple incorrect cases. The detailed case records and observations are maintained in \texttt{results/final\_results.md} and the error-analysis document.
+The verified run produced five representative failures from 1,800 policy-case records. The highest-cost selected error is P2 / seed 2026 / case 2026-28: the true state is \texttt{other}, the prediction is \texttt{test\_data\_state}, confidence is 68.56\%, and total decision cost is 99. The case receives a positive DB observation after several negative checks.
+
+Other representative failures include P3 and P0 overcommitting to code regression when the true state is \texttt{other}, and P2 confusing test-data/state or code regression with CI infrastructure after all six observations are negative. These failures motivate explicit calibration, abstention, richer temporal/service-health evidence, and stronger treatment of the residual state.
+
+\section{Failure-driven re-test}
+The DB/state failure motivated a controlled re-test in which DB evidence was made more discriminative against flaky tests, external dependencies, and CI infrastructure while leaving the test-data likelihood unchanged.
+
+At a 60\% threshold:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Policy & Baseline accuracy & Re-test accuracy & Baseline decision cost & Re-test decision cost\\
+\midrule
+P2 & 66.17\% & 66.33\% & 44.24 & 44.14\\
+P3 & 72.83\% & 73.00\% & 39.78 & 39.69\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The change is small. This is useful evidence: changing one likelihood assumption is insufficient to solve the broader unknown-state and calibration problem.
 
 \section{External data sources and validation path}
-The current experiment is simulation-only and does not use an external dataset to generate cases or calibrate the priors and likelihoods. Public CI datasets are recorded as references for future empirical validation. TravisTorrent combines Travis CI build information with GitHub repository metadata and contains 2,640,825 builds from more than 1,000 projects \cite{beller2017travistorrent}. UniLoc provides 700 CI/CD build failures and corresponding fixes and extends TravisTorrent \cite{uniloc}. The Rails Dataset in the CI-Datasets collection provides large-scale Travis CI test-execution records \cite{railsdataset}. The Continuous Defect Prediction dataset extends TravisTorrent with file-level changes and software-process metrics \cite{madeyski2017cdp}. These datasets could be used in a later phase to calibrate priors, validate evidence likelihoods, and evaluate the policies on held-out real cases. They are not evidence that the current 0.40/0.30/0.10/0.10/0.05/0.05 priors or 0.8/0.4/0.1 likelihood mapping are production frequencies.
+The current experiment is simulation-only and does not use an external dataset to generate cases or calibrate the priors and likelihoods. Public CI datasets are recorded in \texttt{docs/data\_sources.md} for future empirical validation. TravisTorrent combines Travis CI build information with GitHub repository metadata and reports 2,640,825 builds from more than 1,000 projects \cite{beller2017travistorrent}. UniLoc provides 700 CI/CD build failures and corresponding fixes \cite{uniloc}. The Rails Dataset in CI-Datasets provides Travis CI test-execution records \cite{railsdataset}. The Continuous Defect Prediction dataset extends TravisTorrent with file-level changes and process metrics \cite{madeyski2017cdp}. These sources are future calibration/evaluation inputs, not evidence that the current simulation probabilities are production frequencies.
 
-\section{Extensions}
-Two extensions beyond the supplied information-theory ladder are used: value of perfect information (VPI) and value of sample information (VSI). VPI provides an upper bound on the value of learning the true state, while VSI focuses on the expected decision improvement from a particular imperfect observation. These concepts expose a limitation of pure EIG: information can reduce entropy without changing the eventual action.
+\section{Extensions beyond the supplied ladder}
+Two concepts beyond the supplied information-theory ladder are used: value of perfect information (VPI) and value of sample information (VSI). VPI provides an upper bound on the value of learning the true state; VSI focuses on the expected decision improvement from a particular imperfect observation. They expose a limitation of pure EIG: information can reduce entropy without changing the eventual action.
+
+In this project these concepts led to a decision-aware stop rule and to the distinction between information ranking and actual decision value.
 
 \section{Limitations}
-The simulated priors and likelihoods are not calibrated to a production CI dataset. The six causes may be incomplete. Historical failure comparability is not validated. A single passing rerun does not establish flakiness. Community discussion is treated as practitioner evidence, not scientific ground truth. The experiment therefore supports claims about the behavior of the simulated policies under stated assumptions, not general claims about real CI systems or production ROI.
+The simulated priors and likelihoods are not calibrated to a production CI dataset. The six causes may be incomplete. The binary evidence representation is simplified and evidence sources can be correlated in reality. The consequence costs are assumptions. The experiment contains 600 cases per policy, which is appropriate for the cohort experiment but not enough to establish production-level statistical confidence. Most importantly, the simulator uses the same likelihood assumptions that the Bayesian policy uses, so the experiment evaluates policy behavior under an assumed probabilistic world rather than validating those probabilities.
 
 \section{AI use and provenance}
-AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, reasoning checks, implementation support, simulation support, and document structuring. The user's project decisions remain the source of the selected causes, priors, qualitative evidence assumptions, operational response boundaries, and research direction. The AI review log records accepted and rejected review comments and explicitly rejects unsupported claims.
+AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, reasoning checks, implementation support, simulation support, and document structuring. The repository retains executable code, fixed seeds, decision records, case-level evidence, failure analysis, and limitations so that the work remains auditable.
 
 \section{Selected references}
 \begin{thebibliography}{9}
-\bibitem{athey2018} Athey, S., and Levin, J. \emph{The Value of Information in Monotone Decision Problems}. Research in Economics, 72(1), 101--116.
-\bibitem{flakyreplication2021} \emph{What is the Vocabulary of Flaky Tests? An Extended Replication}. IEEE conference publication, 2021.
 \bibitem{beller2017travistorrent} Beller, M., Gousios, G., and Zaidman, A. \emph{TravisTorrent: Synthesizing Travis CI and GitHub for Full-Stack Research on Continuous Integration}. MSR 2017. DOI: 10.1109/MSR.2017.24.
 \bibitem{uniloc} \emph{UniLoc: Unified Fault Localization of Continuous Integration Failures}. Public dataset and project page.
 \bibitem{railsdataset} Liang, J., Elbaum, S., and Rothermel, G. \emph{The Rails Dataset of Testing Results from Travis CI}. 2018.
@@ -106,6 +159,6 @@ AI assistance was used for terminology discovery, research-query generation, sou
 \end{thebibliography}
 
 \section{Reproducibility}
-The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, Jupyter notebook, error analysis, and final result summary. GitHub Actions validates the model checks and regenerates the experiment and case-level evidence from fixed seeds.
+The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, notebook, error analysis, final results, and external-data plan. GitHub Actions validates the implementation and regenerates the case-level evidence from fixed seeds.
 
 \end{document}
