@@ -1,21 +1,12 @@
-# Probability Decision Record — v0.1
+# Probability Decision Record — CI Diagnosis Agent (Current)
+
+> **Archived note:** this file originally contained the v0.1 decision record. It is now aligned with the current simulation model. The canonical submission artifact is `docs/probability_decision_record.md`.
 
 ## Purpose
 
-This record captures a representative belief-update path used by the CI Diagnosis Agent prototype. It is an audit artifact for the simulation, not a claim about real-world CI failure frequencies.
+Capture a representative Bayesian belief-update path used by the current CI Diagnosis Agent. This is an audit artifact for the simulation, not a claim about real-world CI failure frequencies.
 
-## Hidden states
-
-The v0.1 simulator uses six competing hypotheses:
-
-- Code regression
-- Flaky test
-- External dependency
-- CI infrastructure
-- Test-data/state
-- Other
-
-## Initial prior
+## Hidden states and priors
 
 | Hypothesis | Prior |
 |---|---:|
@@ -28,90 +19,88 @@ The v0.1 simulator uses six competing hypotheses:
 
 Initial entropy: **2.1464 bits**.
 
-These values are illustrative simulation assumptions, not measured real-world probabilities.
+These are simulation assumptions, not calibrated production probabilities.
 
-## Evidence 1 — rerun passes
+## Likelihood mapping
 
-Illustrative likelihoods used by the simulator:
+The current simulator maps qualitative assumptions to:
 
-| Hypothesis | Likelihood |
-|---|---:|
-| Code regression | 0.10 |
-| Flaky test | 0.70 |
-| External dependency | 0.40 |
-| CI infrastructure | 0.40 |
-| Test-data/state | 0.10 |
-| Other | 0.50 |
+- often → 0.8
+- sometimes → 0.4
+- rarely → 0.1
 
-Posterior after the observation:
+For `RERUN -> PASS`, the current model gives:
 
 | Hypothesis | Posterior |
 |---|---:|
-| Code regression | 11.11% |
-| Flaky test | 58.33% |
+| Code regression | 34.78% |
+| Flaky test | 52.17% |
+| External dependency | 8.70% |
+| CI infrastructure | 2.17% |
+| Test-data/state | 1.09% |
+| Other | 1.09% |
+
+For `RERUN -> FAIL`:
+
+| Hypothesis | Posterior |
+|---|---:|
+| Code regression | 44.44% |
+| Flaky test | 11.11% |
 | External dependency | 11.11% |
-| CI infrastructure | 11.11% |
-| Test-data/state | 1.39% |
-| Other | 6.94% |
+| CI infrastructure | 16.67% |
+| Test-data/state | 8.33% |
+| Other | 8.33% |
 
-Entropy after evidence: **1.8632 bits**.
+## Entropy and expected information gain
 
-The rerun makes flakiness the leading hypothesis, but does not establish a diagnosis.
+Initial entropy is **2.1464 bits**.
 
-## Action selection
+For a passing rerun, posterior entropy is **1.5879 bits** and outcome-specific information gain is **0.5585 bits**.
 
-At this belief state, P1 evaluates available diagnostic actions using expected information gain relative to assumed action cost. `SEARCH_HISTORY` is selected because it has the strongest EIG/cost score under the v0.1 model.
+For a failed rerun, posterior entropy can increase because uncertainty is redistributed among several hypotheses. This is why the policy uses expected information gain before selecting an action rather than treating every observed outcome as guaranteed information.
 
-The action costs are relative simulation units:
+For the rerun action:
 
-- 1 = Low
-- 2 = Low–Medium
-- 3 = Medium
-- 4 = Medium–High
+```text
+P(PASS) = 0.46
+P(FAIL) = 0.54
+Expected posterior entropy ≈ 1.9469 bits
+EIG ≈ 0.1995 bits
+```
 
-They are assumptions, not measured time or monetary costs.
+P3 compares this expected value against action cost.
 
-## Evidence 2 — flaky pattern found in history
+## Costs and threshold
 
-Illustrative likelihoods:
+Diagnostic costs are relative simulation units:
 
-| Hypothesis | Likelihood |
-|---|---:|
-| Code regression | 0.10 |
-| Flaky test | 0.80 |
-| External dependency | 0.10 |
-| CI infrastructure | 0.10 |
-| Test-data/state | 0.10 |
-| Other | 0.50 |
+- cheap automated checks = 1
+- heavier diagnostics = 2
+- human review consequence = 8
+- human intervention/change consequence = 9
 
-Updated posterior:
+The main comparison uses a **70% commitment threshold**. This is a simulation parameter and is tested at 60%, 70%, and 80%; it is not an empirically derived universal threshold.
 
-| Hypothesis | Posterior |
-|---|---:|
-| Code regression | 2.07% |
-| Flaky test | 87.05% |
-| External dependency | 2.07% |
-| CI infrastructure | 2.07% |
-| Test-data/state | 0.26% |
-| Other | 6.48% |
+## Policies
 
-Entropy after evidence: **0.7999 bits**.
+- **P0:** fixed diagnostic sequence.
+- **P2:** posterior-threshold policy.
+- **P3:** expected-information-gain per cost policy.
 
-Information gain from the historical evidence: **1.0632 bits**.
+## Experiment
 
-## Interpretation
+The current evaluation uses **5 fixed seeds × 120 cases**. Each policy receives the same pre-generated hidden cases and observation opportunities so that policy comparisons are fair.
 
-The two observations progressively reduce uncertainty and shift belief toward the flaky-test hypothesis. The probability is a model output under illustrative assumptions, not a calibrated probability that a production failure is flaky.
+The simulated cases evaluate policy behavior; they do not independently recalibrate the priors because the cases are generated from the same assumed probabilistic model.
 
-## Limitations
+## Canonical record
 
-- Priors are illustrative.
-- Likelihoods are illustrative.
-- Relative action costs are qualitative assumptions.
-- Historical comparability is not validated against a production dataset.
-- The 80% stopping threshold is a prototype parameter.
-- The 48 evaluation cases are simulated.
+For the complete current model, likelihood table, cost model, posterior examples, experiment methodology and limitations, see:
+
+`docs/probability_decision_record.md`
+
+`research/research-file.md`
 
 ## Version
 
-`probability-decision-record-v0.1`
+`probability-decision-record-current`
