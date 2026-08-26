@@ -1,5 +1,7 @@
 # CI Diagnosis Agent — Results v0.1
 
+> **ARCHIVED HISTORICAL RESULT.** This file records the original 48-case v0.1 experiment and is intentionally preserved for research history. It is **not** the current Week 1 result and must not be used for the final submission's headline metrics. See `results/final_results.md` for the current 5-seed × 120-case evaluation.
+
 ## Experiment
 
 The v0.1 experiment compares two policies on 48 simulated CI integration-test diagnosis cases.
@@ -21,7 +23,7 @@ The hidden true cause is available to the simulator for evaluation but is not tr
 | Average relative diagnostic cost | 13.96 | 11.42 |
 | Average actions | 5.50 | 4.94 |
 
-Within this simulator, P1 performed better than P0 across the measured metrics. This is a conditional simulation result, not evidence that P1 will outperform a fixed sequence in real CI systems.
+Within this simulator, P1 performed better than P0 across the measured metrics. This was a conditional simulation result, not evidence that P1 would outperform a fixed sequence in real CI systems.
 
 ## P1 per-class result
 
@@ -36,7 +38,7 @@ Eight cases were generated for each hidden state.
 | Test-data/state | 0 / 8 |
 | Other | 0 / 8 |
 
-The strongest current discrimination is for code-regression and flaky-test cases. Several other states are poorly distinguished by the current simulated observation model.
+The strongest discrimination was for code-regression and flaky-test cases. Several other states were poorly distinguished by the v0.1 observation model.
 
 ## Five-outcome review
 
@@ -52,13 +54,13 @@ The first five P1 non-correct outcomes were primarily escalations rather than fa
 - True state: External dependency
 - P1: Escalate
 - Cost: 15 relative units
-- Failure condition: dependency evidence was not sufficiently discriminating under the current likelihood model.
+- Failure condition: dependency evidence was not sufficiently discriminating under the v0.1 likelihood model.
 
 ### Case 3
 - True state: Other
 - P1: Escalate
 - Cost: 15 relative units
-- Interpretation: escalation is not necessarily undesirable because the catch-all hypothesis is intentionally weakly specified.
+- Interpretation: escalation was not necessarily undesirable because the catch-all hypothesis was intentionally weakly specified.
 
 ### Case 4
 - True state: CI infrastructure
@@ -74,7 +76,7 @@ The first five P1 non-correct outcomes were primarily escalations rather than fa
 
 ## Cost interpretation
 
-The 15-unit value is the sum of the assumed relative costs of the six actions used before escalation:
+The 15-unit value was the sum of the assumed relative costs of the six actions used before escalation:
 
 - Search history = 1
 - Rerun = 1
@@ -85,21 +87,21 @@ The 15-unit value is the sum of the assumed relative costs of the six actions us
 
 Therefore: **1 + 1 + 2 + 3 + 4 + 4 = 15**.
 
-These are relative simulation units, not minutes or money.
+These were relative simulation units, not minutes or money.
 
 ## Main finding
 
-The v0.1 simulation demonstrates that an evidence-driven policy can be implemented and compared with a fixed diagnostic sequence. P1 shows better measured outcomes in this simulated environment, while also exposing a concrete weakness: the current evidence model does not sufficiently distinguish external-dependency, infrastructure, test-data/state and other failures.
+The v0.1 simulation demonstrated that an evidence-driven policy could be implemented and compared with a fixed diagnostic sequence. It also exposed a concrete weakness: the v0.1 evidence model did not sufficiently distinguish external-dependency, infrastructure, test-data/state and other failures.
 
 ## Limitations
 
-1. Priors and likelihoods are illustrative and not calibrated.
-2. Action costs are qualitative assumptions.
-3. Cases are simulated rather than drawn from a labeled production CI dataset.
-4. Historical comparability is not validated.
-5. The 80% confidence threshold is a prototype parameter.
-6. P2, a separate historical-aware policy, is not claimed as completed in v0.1.
+1. Priors and likelihoods were illustrative and not calibrated.
+2. Action costs were qualitative assumptions.
+3. Cases were simulated rather than drawn from a labeled production CI dataset.
+4. Historical comparability was not validated.
+5. The 80% confidence threshold was a prototype parameter.
+6. P2, a separate historical-aware policy, was not claimed as completed in v0.1.
 
 ## Conclusion
 
-The current result supports continuing the uncertainty-aware diagnosis approach as a prototype research direction. It does not establish real-world superiority. Future work should validate the observation model, costs and priors with appropriate evidence and separately evaluate a historical-aware policy if required by the later research phase.
+The v0.1 result supported continuing the uncertainty-aware diagnosis approach as a prototype research direction. It did not establish real-world superiority.
