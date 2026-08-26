@@ -32,11 +32,12 @@ The verified GitHub Actions experiment produced **1,800 policy-case records** (5
 - Failure mechanism: the residual class is not sufficiently separated by the current evidence model. The derived threshold allows an early terminal decision before the agent has evidence that the world belongs to one of the modeled concrete causes.
 - Design response: retain `other` as an explicit state and add calibration/abstention evaluation rather than forcing a concrete diagnosis whenever the posterior is diffuse.
 
-## Case 3 — P0 flaky test → code regression
+## Case 3 — P0 no-evidence baseline → code regression
 
-- Seed/case: 2026 / 2026-16 in the shared case set
-- True cause: `other` in this case; P0 predicts `code_regression` because it intentionally uses no evidence.
-- Confidence: 40.00% prior
+- Seed/case: 2026 / 2026-16
+- True cause: `other`
+- Prediction: `code_regression`
+- Final confidence: 40.00% prior
 - Actions: none
 - Diagnostic cost: 0
 - Consequence cost: 90
@@ -55,6 +56,7 @@ The verified GitHub Actions experiment produced **1,800 policy-case records** (5
 - Diagnostic cost: 9
 - Consequence cost: 80
 - Total decision cost: 89
+- Escalated: yes
 - Failure mechanism: when every evidence source is negative, the remaining hypotheses are redistributed by the model rather than decisively identified.
 - Design response: add a stronger explicit infrastructure-health observation and test whether negative-evidence patterns are calibrated rather than treating every binary negative as equally informative.
 
@@ -69,6 +71,7 @@ The verified GitHub Actions experiment produced **1,800 policy-case records** (5
 - Diagnostic cost: 9
 - Consequence cost: 80
 - Total decision cost: 89
+- Escalated: yes
 - Failure mechanism: the model has little positive evidence for any cause, so the final posterior remains driven by the structure of the likelihood table.
 - Design response: this supports adding richer non-binary evidence and calibration before treating a low-confidence terminal classification as reliable.
 
