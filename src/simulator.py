@@ -41,6 +41,18 @@ ACTION_COSTS = {
     Action.CHECK_DB: 2,
 }
 
+# Decision-consequence units used by the policy experiment.
+# 8 = human review/intervention; 9 = highest-consequence unknown/wrong automation.
+HUMAN_REVIEW_COST = 8
+HIGH_CONSEQUENCE_COST = 9
+
+# The cohort threshold is derived from false-positive and false-negative costs,
+# rather than selected as a round confidence number.
+# p* = C_FP / (C_FP + C_FN)
+C_FP = HUMAN_REVIEW_COST
+C_FN = HIGH_CONSEQUENCE_COST
+DERIVED_DECISION_THRESHOLD = C_FP / (C_FP + C_FN)  # 8 / 17 = 47.06%
+
 # Probability of the positive observation given the hidden cause.
 # Values come from the research assumptions:
 # often=0.8, sometimes=0.4, rarely=0.1.
@@ -94,6 +106,23 @@ LIKELIHOODS = {
         Cause.OTHER: 0.1,
     },
 }
+
+
+def decision_consequence(true_cause: Cause, predicted_cause: Cause) -> int:
+    """Return consequence cost for the terminal diagnosis decision.
+
+    A correct flaky diagnosis follows the automated rerun path and costs 0.
+    A flaky diagnosis that is wrong is costly because automation was applied to
+    a non-flaky failure. Non-flaky diagnoses route to human review; ``other``
+    carries the highest consequence class.
+    """
+    if predicted_cause == Cause.FLAKY_TEST:
+        if true_cause == Cause.FLAKY_TEST:
+            return 0
+        return HIGH_CONSEQUENCE_COST if true_cause == Cause.OTHER else HUMAN_REVIEW_COST
+    if predicted_cause == Cause.OTHER:
+        return HIGH_CONSEQUENCE_COST
+    return HUMAN_REVIEW_COST
 
 
 @dataclass
