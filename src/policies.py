@@ -1,19 +1,13 @@
 from dataclasses import dataclass, field
 
-from .belief_engine import (
-    entropy,
-    information_gain,
-    most_likely_cause,
-    posterior_after_observation,
-)
+from .belief_engine import information_gain, most_likely_cause, posterior_after_observation
 from .simulator import (
     ACTION_COSTS,
-    C_FP,
-    C_FN,
     Cause,
     DERIVED_DECISION_THRESHOLD,
     HIGH_CONSEQUENCE_COST,
     HUMAN_REVIEW_COST,
+    LIKELIHOODS,
     Action,
 )
 
@@ -95,8 +89,7 @@ def expected_decision_value(beliefs, action):
     """
     current_loss, _ = _best_terminal_loss(beliefs)
     p_positive = sum(
-        beliefs[cause]
-        * __import__("src.simulator", fromlist=["LIKELIHOODS"]).LIKELIHOODS[action][cause]
+        beliefs[cause] * LIKELIHOODS[action][cause]
         for cause in Cause
     )
     positive_beliefs = posterior_after_observation(beliefs, action, True)
@@ -153,9 +146,9 @@ def p3_decision(state: PolicyState, threshold=None):
         for a in candidates
     }
 
-    # Information gain chooses the candidate order; decision value is the
-    # stop gate. If no remaining check can recover more consequence value than
-    # it costs, stop rather than asking merely to reduce entropy.
+    # EIG/cost ranks the candidate; decision value is the stop gate. If the
+    # best-ranked check cannot recover more consequence value than it costs,
+    # stop rather than asking merely to reduce entropy.
     best_action = max(eig_scores, key=eig_scores.get)
     if value_scores[best_action] <= ACTION_COSTS[best_action]:
         return _terminal(cause, confidence)
