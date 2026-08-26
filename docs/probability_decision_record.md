@@ -34,7 +34,18 @@ The prototype maps qualitative research assumptions to simulation probabilities:
 
 These are model assumptions for controlled experimentation and are not calibrated production probabilities.
 
-## Worked update
+For a positive diagnostic observation, the current likelihood table is:
+
+| Action | Code | Flaky | Dependency | CI infra | Test data | Other |
+|---|---:|---:|---:|---:|---:|---:|
+| Rerun | 0.4 | 0.8 | 0.4 | 0.1 | 0.1 | 0.1 |
+| Search history | 0.4 | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Check dependency | 0.1 | 0.4 | 0.8 | 0.1 | 0.1 | 0.1 |
+| Local reproduction | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Inspect code | 0.8 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| Check DB | 0.1 | 0.1 | 0.1 | 0.1 | 0.8 | 0.1 |
+
+## Worked Bayesian update
 
 For `RERUN -> PASSED`, the current likelihood table gives a posterior of approximately:
 
@@ -54,38 +65,62 @@ For `RERUN -> FAILED`:
 - test-data/state: 8.33%
 - other: 8.33%
 
+A rerun changes belief; it does not prove a root cause.
+
+## Entropy and expected information gain
+
+Entropy is:
+
+`H(P) = -Σ p_i log2(p_i)`.
+
+For the initial prior:
+
+`H(before) = 2.1464 bits`.
+
+After `RERUN -> PASS`:
+
+`H(after | PASS) = 1.5879 bits`, so the outcome-specific information gain is `0.5585 bits`.
+
+The rerun can also fail. The model gives `P(PASS)=0.46` and `P(FAIL)=0.54`. The expected post-action entropy is therefore:
+
+`0.46 × 1.5879 + 0.54 × 2.2527 = 1.9469 bits`.
+
+Thus expected information gain before running the rerun is:
+
+`EIG = 2.1464 - 1.9469 = 0.1995 bits`.
+
+The distinction matters: outcome-specific information gain is calculated after an observation; EIG is calculated before choosing an action.
+
 ## Costs
 
 | Cost class | Simulation units |
 |---|---:|
 | Cheap automated check | 1 |
 | Heavier automated diagnostic | 2 |
-| Human review/intervention | 8 |
-| Highest-consequence outcome | 9 |
+| Human review/intervention | 80 |
+| Highest-consequence outcome | 90 |
 
-Diagnostic action costs are 1 or 2. Human consequence costs are 8 or 9. These are simulation units, not production money or minutes.
+Diagnostic action costs are 1 or 2. Human consequence costs are 80 or 90. These are simulation units, not production money or minutes.
 
 ## Derived decision threshold
 
 The decision threshold is no longer a round-number confidence assumption.
 
-For a binary decision where a false positive costs `C_FP = 8` and a false negative costs `C_FN = 9`:
+For a binary decision where a false positive costs `C_FP = 80` and a false negative costs `C_FN = 90`:
 
 ```text
 p* = C_FP / (C_FP + C_FN)
-   = 8 / (8 + 9)
-   = 8 / 17
+   = 80 / (80 + 90)
+   = 80 / 170
    = 0.470588...
    = 47.06%
 ```
 
-This is the **derived simulation decision threshold** used by P2 and P3 by default. It is not an empirically derived production threshold. Threshold sensitivity remains necessary because the consequence costs themselves are assumptions.
-
-The result is deliberately lower than the previous 70% heuristic. That is a finding, not a typo: the cohort requirement is to derive the threshold from consequences and then investigate what the resulting policy does.
+This is the **derived simulation decision threshold** used by P2 and as the default terminal threshold in P3. It is not an empirically derived production threshold. Threshold sensitivity remains necessary because the consequence costs themselves are assumptions.
 
 ## P0 baseline
 
-P0 is now a true no-evidence baseline. It does not run diagnostics and always selects the modal prior cause, `code_regression` at 40% prior probability. This establishes whether adaptive evidence use beats a trivial policy.
+P0 is a true no-evidence baseline. It does not run diagnostics and always selects the modal prior cause, `code_regression` at 40% prior probability. This establishes whether adaptive evidence use beats a trivial policy.
 
 ## P2 threshold policy
 
@@ -121,6 +156,14 @@ Bayesian posterior update
     ↓
 Repeat
 ```
+
+## Simulated-case methodology
+
+Each simulated case represents one artificial CI-failure scenario. The simulator samples a hidden ground-truth cause from the stated prior distribution and generates potential diagnostic observations according to the likelihood model. The policy does not observe the hidden cause; it only observes evidence revealed by actions it chooses.
+
+The final experiment uses 120 cases for each of five fixed seeds (2026–2030), for 600 cases per policy and 1,800 policy-case records across P0/P2/P3. All policies use the same pre-generated cases and observation opportunities.
+
+These cases are evaluation cases, not an empirical dataset. Because they are generated from the assumed priors and likelihoods, they are not used to recalibrate those priors or likelihoods.
 
 ## Audit requirements
 
