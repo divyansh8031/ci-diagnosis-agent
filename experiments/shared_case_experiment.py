@@ -11,8 +11,16 @@ import csv
 from pathlib import Path
 
 from src.belief_engine import initial_beliefs, posterior_after_observation
-from src.policies import PolicyState, p2_decision, p3_decision
-from src.simulator import ACTION_COSTS, Action, Cause, LIKELIHOODS, Simulator
+from src.policies import PolicyState, p0_decision, p2_decision, p3_decision
+from src.simulator import (
+    ACTION_COSTS,
+    Action,
+    Cause,
+    DERIVED_DECISION_THRESHOLD,
+    LIKELIHOODS,
+    Simulator,
+    decision_consequence,
+)
 
 NUM_CASES = 120
 SEEDS = (2026, 2027, 2028, 2029, 2030)
@@ -38,46 +46,47 @@ def generate_cases(seed):
     return cases
 
 
-def run_policy(cases, policy_name, threshold=0.70):
+def run_policy(cases, policy_name, threshold=DERIVED_DECISION_THRESHOLD):
     results = []
     for case in cases:
         beliefs = initial_beliefs()
         actions = []
         observations_seen = []
         cost = 0
-        for _ in range(len(Action)):
+
+        # P0 is deliberately trivial: it sees no evidence and always chooses
+        # the modal prior cause. This is the cohort's required no-evidence baseline.
+        if policy_name == "P0":
             state = PolicyState(beliefs, actions, cost)
-            if policy_name == "P0":
-                candidates = [a for a in Action if a not in actions]
-                if not candidates:
-                    break
-                action = candidates[0]
-            elif policy_name == "P2":
-                decision = p2_decision(state, threshold=threshold)
+            decision = p0_decision(state)
+            predicted = decision["cause"]
+            confidence = decision["confidence"]
+        else:
+            for _ in range(len(Action)):
+                state = PolicyState(beliefs, actions, cost)
+                if policy_name == "P2":
+                    decision = p2_decision(state, threshold=threshold)
+                elif policy_name == "P3":
+                    decision = p3_decision(state, threshold=threshold)
+                else:
+                    raise ValueError(policy_name)
+
                 if decision["type"] == "terminal":
                     break
-                action = decision["action"]
-            elif policy_name == "P3":
-                decision = p3_decision(state, threshold=threshold)
-                if decision["type"] == "terminal":
-                    break
-                action = decision["action"]
-            else:
-                raise ValueError(policy_name)
 
-            observation = case.observations[action]
-            beliefs = posterior_after_observation(beliefs, action, observation)
-            actions.append(action)
-            observations_seen.append(f"{action.value}={'PASS' if observation else 'FAIL'}")
-            cost += ACTION_COSTS[action]
+                action = decision["action"]
+                observation = case.observations[action]
+                beliefs = posterior_after_observation(beliefs, action, observation)
+                actions.append(action)
+                observations_seen.append(
+                    f"{action.value}={'PASS' if observation else 'FAIL'}"
+                )
+                cost += ACTION_COSTS[action]
 
-        predicted = max(beliefs, key=beliefs.get)
-        confidence = beliefs[predicted]
-        escalated = predicted in {Cause.CODE_REGRESSION, Cause.EXTERNAL_DEPENDENCY,
-                                  Cause.CI_INFRASTRUCTURE, Cause.TEST_DATA_STATE, Cause.OTHER}
-        # Consequence classes follow the probability decision record:
-        # human review = 8, human intervention/change = 9. Flaky rerun is automated.
-        consequence_cost = 0 if predicted == Cause.FLAKY_TEST else (9 if predicted == Cause.OTHER else 8)
+            predicted = max(beliefs, key=beliefs.get)
+            confidence = beliefs[predicted]
+
+        consequence_cost = decision_consequence(case.true_cause, predicted)
         results.append({
             "case_id": case.case_id,
             "true_cause": case.true_cause.value,
@@ -90,7 +99,7 @@ def run_policy(cases, policy_name, threshold=0.70):
             "actions": len(actions),
             "action_sequence": ">".join(a.value for a in actions),
             "observations": ";".join(observations_seen),
-            "escalated": escalated,
+            "escalated": predicted != Cause.FLAKY_TEST,
         })
     return results
 
@@ -121,7 +130,7 @@ def confusion_matrix(results):
     return matrix
 
 
-def run_all(threshold=0.70, output_dir="results/generated"):
+def run_all(threshold=DERIVED_DECISION_THRESHOLD, output_dir="results/generated"):
     output = {}
     for seed in SEEDS:
         cases = generate_cases(seed)
@@ -132,7 +141,7 @@ def run_all(threshold=0.70, output_dir="results/generated"):
     return output
 
 
-def print_summary(threshold=0.70):
+def print_summary(threshold=DERIVED_DECISION_THRESHOLD):
     output = run_all(threshold)
     for policy in ("P0", "P2", "P3"):
         rows = [output[(seed, policy)] for seed in SEEDS]
