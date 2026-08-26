@@ -41,17 +41,18 @@ ACTION_COSTS = {
     Action.CHECK_DB: 2,
 }
 
-# Decision-consequence units used by the policy experiment.
-# 8 = human review/intervention; 9 = highest-consequence unknown/wrong automation.
-HUMAN_REVIEW_COST = 8
-HIGH_CONSEQUENCE_COST = 9
+# Terminal response/consequence costs. The scale is deliberately larger than
+# diagnostic costs so that information can have decision value. The absolute
+# units are arbitrary simulation units; only the relative costs matter.
+HUMAN_REVIEW_COST = 80
+HIGH_CONSEQUENCE_COST = 90
 
-# The cohort threshold is derived from false-positive and false-negative costs,
-# rather than selected as a round confidence number.
-# p* = C_FP / (C_FP + C_FN)
+# The decision threshold is derived from the consequence ratio, not selected
+# as a round confidence number. Scaling both costs by 10 leaves the threshold
+# unchanged while making diagnostic cost meaningfully comparable to consequence.
 C_FP = HUMAN_REVIEW_COST
 C_FN = HIGH_CONSEQUENCE_COST
-DERIVED_DECISION_THRESHOLD = C_FP / (C_FP + C_FN)  # 8 / 17 = 47.06%
+DERIVED_DECISION_THRESHOLD = C_FP / (C_FP + C_FN)  # 80 / 170 = 47.06%
 
 # Probability of the positive observation given the hidden cause.
 # Values come from the research assumptions:
@@ -107,22 +108,65 @@ LIKELIHOODS = {
     },
 }
 
+# Cost of the response selected by a terminal diagnosis, conditional on the
+# true hidden cause. Correct diagnoses can still carry operational cost: e.g.
+# a code-regression diagnosis may require human review. Wrong diagnoses carry
+# the ordinary review cost or the highest consequence for an "other" case.
+RESPONSE_COSTS = {
+    Cause.FLAKY_TEST: {
+        Cause.CODE_REGRESSION: HUMAN_REVIEW_COST,
+        Cause.FLAKY_TEST: 0,
+        Cause.EXTERNAL_DEPENDENCY: HUMAN_REVIEW_COST,
+        Cause.CI_INFRASTRUCTURE: HUMAN_REVIEW_COST,
+        Cause.TEST_DATA_STATE: HUMAN_REVIEW_COST,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+    Cause.CODE_REGRESSION: {
+        Cause.CODE_REGRESSION: 30,
+        Cause.FLAKY_TEST: HUMAN_REVIEW_COST,
+        Cause.EXTERNAL_DEPENDENCY: HUMAN_REVIEW_COST,
+        Cause.CI_INFRASTRUCTURE: HUMAN_REVIEW_COST,
+        Cause.TEST_DATA_STATE: HUMAN_REVIEW_COST,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+    Cause.EXTERNAL_DEPENDENCY: {
+        Cause.CODE_REGRESSION: HUMAN_REVIEW_COST,
+        Cause.FLAKY_TEST: HUMAN_REVIEW_COST,
+        Cause.EXTERNAL_DEPENDENCY: 20,
+        Cause.CI_INFRASTRUCTURE: HUMAN_REVIEW_COST,
+        Cause.TEST_DATA_STATE: HUMAN_REVIEW_COST,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+    Cause.CI_INFRASTRUCTURE: {
+        Cause.CODE_REGRESSION: HUMAN_REVIEW_COST,
+        Cause.FLAKY_TEST: HUMAN_REVIEW_COST,
+        Cause.EXTERNAL_DEPENDENCY: HUMAN_REVIEW_COST,
+        Cause.CI_INFRASTRUCTURE: 20,
+        Cause.TEST_DATA_STATE: HUMAN_REVIEW_COST,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+    Cause.TEST_DATA_STATE: {
+        Cause.CODE_REGRESSION: HUMAN_REVIEW_COST,
+        Cause.FLAKY_TEST: HUMAN_REVIEW_COST,
+        Cause.EXTERNAL_DEPENDENCY: HUMAN_REVIEW_COST,
+        Cause.CI_INFRASTRUCTURE: HUMAN_REVIEW_COST,
+        Cause.TEST_DATA_STATE: 40,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+    Cause.OTHER: {
+        Cause.CODE_REGRESSION: HIGH_CONSEQUENCE_COST,
+        Cause.FLAKY_TEST: HIGH_CONSEQUENCE_COST,
+        Cause.EXTERNAL_DEPENDENCY: HIGH_CONSEQUENCE_COST,
+        Cause.CI_INFRASTRUCTURE: HIGH_CONSEQUENCE_COST,
+        Cause.TEST_DATA_STATE: HIGH_CONSEQUENCE_COST,
+        Cause.OTHER: HIGH_CONSEQUENCE_COST,
+    },
+}
+
 
 def decision_consequence(true_cause: Cause, predicted_cause: Cause) -> int:
-    """Return consequence cost for the terminal diagnosis decision.
-
-    A correct flaky diagnosis follows the automated rerun path and costs 0.
-    A flaky diagnosis that is wrong is costly because automation was applied to
-    a non-flaky failure. Non-flaky diagnoses route to human review; ``other``
-    carries the highest consequence class.
-    """
-    if predicted_cause == Cause.FLAKY_TEST:
-        if true_cause == Cause.FLAKY_TEST:
-            return 0
-        return HIGH_CONSEQUENCE_COST if true_cause == Cause.OTHER else HUMAN_REVIEW_COST
-    if predicted_cause == Cause.OTHER:
-        return HIGH_CONSEQUENCE_COST
-    return HUMAN_REVIEW_COST
+    """Return the response/consequence cost for a terminal diagnosis."""
+    return RESPONSE_COSTS[predicted_cause][true_cause]
 
 
 @dataclass
