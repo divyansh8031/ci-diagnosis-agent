@@ -46,6 +46,7 @@ GitHub Actions executes the same validation and experiment and uploads the compl
 
 ## Research artifacts
 
+- `research/research-file.md`
 - `results/final_results.md`
 - `results/confusion_matrices.md`
 - `docs/architecture.dot`
@@ -53,7 +54,7 @@ GitHub Actions executes the same validation and experiment and uploads the compl
 - `docs/extension_concepts.md`
 - `docs/error_analysis.md`
 - `docs/ai_review_log.md`
-- `docs/rubric_audit.md`
+- `docs/data_sources.md`
 - `paper/preprint.tex`
 - `notebooks/experiment_results.ipynb`
 - `experiments/shared_case_experiment.py`
@@ -62,7 +63,7 @@ GitHub Actions executes the same validation and experiment and uploads the compl
 
 ## Submission discipline
 
-Simulation probabilities are not real-world frequencies. P3 is not described as universally superior. Community participation and primary-source verification are only claimed when the corresponding external evidence is actually attached to the submission.
+Simulation probabilities are not real-world frequencies. P3 is not described as universally superior. External datasets listed in `docs/data_sources.md` are references for calibration/validation context only; they were not used to generate the current 120-case simulation unless explicitly stated otherwise.
 
 ## AI use
 
