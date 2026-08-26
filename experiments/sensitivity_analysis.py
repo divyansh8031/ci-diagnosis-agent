@@ -9,16 +9,9 @@ It is a robustness/design experiment, not a replacement for the baseline model.
 """
 
 from statistics import mean
-import sys
-from pathlib import Path
-import random
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from experiments.shared_case_experiment import generate_cases, run_policy, summarize, SEEDS
-from src.belief_engine import entropy, posterior_after_observation
-from src.simulator import Action, Cause, DERIVED_DECISION_THRESHOLD, LIKELIHOODS, PRIORS
-from src.policies import expected_decision_value
+from src.simulator import Action, Cause, DERIVED_DECISION_THRESHOLD, LIKELIHOODS
 
 # The derived threshold is the center point. Lower/higher values test the
 # sensitivity of the policy rather than replacing the derivation.
@@ -35,102 +28,39 @@ RETEST_LIKELIHOODS[Action.CHECK_DB].update({
 })
 
 
-def _generate_cases_with_likelihoods(seed, likelihoods):
-    rng = random.Random(seed)
-    cases = []
-    for index in range(120):
-        true_cause = rng.choices(
-            list(PRIORS.keys()),
-            weights=list(PRIORS.values()),
-            k=1,
-        )[0]
-        observations = {
-            action: rng.random() < likelihoods[action][true_cause]
-            for action in Action
-        }
-        cases.append((f"{seed}-{index + 1}", true_cause, observations))
-    return cases
+def _run_model(threshold, likelihoods=None):
+    """Run the normal experiment, optionally under a temporary likelihood model."""
+    original = {action: dict(values) for action, values in LIKELIHOODS.items()}
+    try:
+        if likelihoods is not None:
+            for action, values in likelihoods.items():
+                LIKELIHOODS[action].clear()
+                LIKELIHOODS[action].update(values)
 
-
-def _run_retest_policy(cases, policy, threshold=0.60):
-    """Run the same policy logic against the failure-driven likelihood model."""
-    from experiments.shared_case_experiment import run_policy as baseline_run_policy
-    from src.belief_engine import initial_beliefs
-    from src.policies import PolicyState, p0_decision, p2_decision, p3_decision
-    from src.simulator import ACTION_COSTS, Cause, decision_consequence
-
-    results = []
-    for case_id, true_cause, observations in cases:
-        beliefs = initial_beliefs()
-        actions = []
-        cost = 0
-        if policy == "P0":
-            predicted = p0_decision(PolicyState(beliefs))["cause"]
-        else:
-            for _ in Action:
-                state = PolicyState(beliefs, actions, cost)
-                decision = p2_decision(state, threshold) if policy == "P2" else p3_decision(state, threshold)
-                if decision["type"] == "terminal":
-                    break
-                action = decision["action"]
-                positive = observations[action]
-                # Recalculate the posterior with the alternative DB likelihoods.
-                if action == Action.CHECK_DB:
-                    p = sum(beliefs[c] * RETEST_LIKELIHOODS[action][c] for c in Cause)
-                    if positive:
-                        weights = {c: beliefs[c] * RETEST_LIKELIHOODS[action][c] for c in Cause}
-                    else:
-                        weights = {c: beliefs[c] * (1 - RETEST_LIKELIHOODS[action][c]) for c in Cause}
-                    total = sum(weights.values())
-                    beliefs = {c: w / total for c, w in weights.items()}
-                else:
-                    beliefs = posterior_after_observation(beliefs, action, positive)
-                actions.append(action)
-                cost += ACTION_COSTS[action]
-            predicted = max(beliefs, key=beliefs.get)
-
-        consequence = decision_consequence(true_cause, predicted)
-        results.append({
-            "correct": predicted == true_cause,
-            "diagnostic_cost": cost,
-            "decision_cost": cost + consequence,
-            "actions": len(actions),
-            "escalated": predicted != Cause.FLAKY_TEST,
-        })
-    return results
-
-
-def _summary(results):
-    return {
-        "accuracy": mean(row["correct"] for row in results),
-        "mean_diagnostic_cost": mean(row["diagnostic_cost"] for row in results),
-        "mean_decision_cost": mean(row["decision_cost"] for row in results),
-        "mean_diagnostic_actions": mean(row["actions"] for row in results),
-        "escalation_rate": mean(row["escalated"] for row in results),
-    }
-
-
-def run():
-    for threshold in THRESHOLDS:
+        aggregates = {}
         for policy in ("P2", "P3"):
             runs = []
             for seed in SEEDS:
                 cases = generate_cases(seed)
-                results = run_policy(cases, policy, threshold=threshold)
-                runs.append(summarize(results))
-            aggregate = {
+                runs.append(summarize(run_policy(cases, policy, threshold=threshold)))
+            aggregates[policy] = {
                 metric: mean(row[metric] for row in runs)
                 for metric in runs[0]
             }
+        return aggregates
+    finally:
+        for action, values in original.items():
+            LIKELIHOODS[action].clear()
+            LIKELIHOODS[action].update(values)
+
+
+def run():
+    for threshold in THRESHOLDS:
+        for policy, aggregate in _run_model(threshold).items():
             print("BASELINE", policy, threshold, aggregate)
 
     print("FAILURE-DRIVEN RETEST at threshold 0.60")
-    for policy in ("P2", "P3"):
-        runs = []
-        for seed in SEEDS:
-            cases = _generate_cases_with_likelihoods(seed, RETEST_LIKELIHOODS)
-            runs.append(_summary(_run_retest_policy(cases, policy, threshold=0.60)))
-        aggregate = {metric: mean(row[metric] for row in runs) for metric in runs[0]}
+    for policy, aggregate in _run_model(0.60, RETEST_LIKELIHOODS).items():
         print("RETEST", policy, aggregate)
 
 
