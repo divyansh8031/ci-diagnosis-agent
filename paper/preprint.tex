@@ -83,6 +83,9 @@ Sensitivity analysis shows that at 60\% P3 has 72.50\% accuracy versus P2's 66.1
 \section{Failure analysis}
 The verified run produced 1,800 policy-case records and five representative incorrect decisions were examined. Examples include P3 misclassifying a simulated flaky test as test-data/state, P2 confusing test-data/state with an external dependency, and P0 confusing CI infrastructure or an unknown cause with code regression. The maximum observed decision cost was 17, tied across multiple incorrect cases. The detailed case records and observations are maintained in \texttt{results/final\_results.md} and the error-analysis document.
 
+\section{External data sources and validation path}
+The current experiment is simulation-only and does not use an external dataset to generate cases or calibrate the priors and likelihoods. Public CI datasets are recorded as references for future empirical validation. TravisTorrent combines Travis CI build information with GitHub repository metadata and contains 2,640,825 builds from more than 1,000 projects \cite{beller2017travistorrent}. UniLoc provides 700 CI/CD build failures and corresponding fixes and extends TravisTorrent \cite{uniloc}. The Rails Dataset in the CI-Datasets collection provides large-scale Travis CI test-execution records \cite{railsdataset}. The Continuous Defect Prediction dataset extends TravisTorrent with file-level changes and software-process metrics \cite{madeyski2017cdp}. These datasets could be used in a later phase to calibrate priors, validate evidence likelihoods, and evaluate the policies on held-out real cases. They are not evidence that the current 0.40/0.30/0.10/0.10/0.05/0.05 priors or 0.8/0.4/0.1 likelihood mapping are production frequencies.
+
 \section{Extensions}
 Two extensions beyond the supplied information-theory ladder are used: value of perfect information (VPI) and value of sample information (VSI). VPI provides an upper bound on the value of learning the true state, while VSI focuses on the expected decision improvement from a particular imperfect observation. These concepts expose a limitation of pure EIG: information can reduce entropy without changing the eventual action.
 
@@ -93,10 +96,14 @@ The simulated priors and likelihoods are not calibrated to a production CI datas
 AI assistance was used for terminology discovery, research-query generation, source discovery, explanation, reasoning checks, implementation support, simulation support, and document structuring. The user's project decisions remain the source of the selected causes, priors, qualitative evidence assumptions, operational response boundaries, and research direction. The AI review log records accepted and rejected review comments and explicitly rejects unsupported claims.
 
 \section{Selected references}
-\begin{itemize}
-\item Athey, S., and Levin, J. \emph{The Value of Information in Monotone Decision Problems}. Research in Economics, 72(1), 101--116.
-\item What is the Vocabulary of Flaky Tests? An Extended Replication. IEEE conference publication, 2021.
-\end{itemize}
+\begin{thebibliography}{9}
+\bibitem{athey2018} Athey, S., and Levin, J. \emph{The Value of Information in Monotone Decision Problems}. Research in Economics, 72(1), 101--116.
+\bibitem{flakyreplication2021} \emph{What is the Vocabulary of Flaky Tests? An Extended Replication}. IEEE conference publication, 2021.
+\bibitem{beller2017travistorrent} Beller, M., Gousios, G., and Zaidman, A. \emph{TravisTorrent: Synthesizing Travis CI and GitHub for Full-Stack Research on Continuous Integration}. MSR 2017. DOI: 10.1109/MSR.2017.24.
+\bibitem{uniloc} \emph{UniLoc: Unified Fault Localization of Continuous Integration Failures}. Public dataset and project page.
+\bibitem{railsdataset} Liang, J., Elbaum, S., and Rothermel, G. \emph{The Rails Dataset of Testing Results from Travis CI}. 2018.
+\bibitem{madeyski2017cdp} Madeyski, L. and Kawalerowicz, M. \emph{Continuous Defect Prediction: The Idea and a Related Dataset}. 2017.
+\end{thebibliography}
 
 \section{Reproducibility}
 The repository contains the simulator, belief engine, policy implementation, shared-case experiment, sensitivity analysis, probability decision record, architecture diagram, Jupyter notebook, error analysis, and final result summary. GitHub Actions validates the model checks and regenerates the experiment and case-level evidence from fixed seeds.
