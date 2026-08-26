@@ -11,11 +11,12 @@ from experiments.shared_case_experiment import (
     run_policy,
     summarize,
 )
+from src.simulator import DERIVED_DECISION_THRESHOLD
 
 OUT = Path("results/generated")
 
 
-def main(threshold=0.70):
+def main(threshold=DERIVED_DECISION_THRESHOLD):
     OUT.mkdir(parents=True, exist_ok=True)
     aggregate = {}
     errors = []
@@ -42,9 +43,18 @@ def main(threshold=0.70):
     (OUT / "aggregate_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
+    (OUT / "experiment_config.json").write_text(
+        json.dumps({
+            "threshold": threshold,
+            "threshold_source": "C_FP / (C_FP + C_FN)",
+            "seeds": list(SEEDS),
+            "cases_per_seed": 120,
+            "policies": ["P0", "P2", "P3"],
+            "same_shared_cases": True,
+        }, indent=2),
+        encoding="utf-8",
+    )
 
-    # Select five representative errors from the actual run, preferring
-    # distinct policies/causes and then higher decision cost.
     selected = []
     seen = set()
     for row in sorted(errors, key=lambda r: r["decision_cost"], reverse=True):
