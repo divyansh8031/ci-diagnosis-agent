@@ -1,7 +1,21 @@
 from dataclasses import dataclass, field
 
-from .belief_engine import information_gain, most_likely_cause, posterior_after_observation
-from .simulator import Action, Cause, ACTION_COSTS
+from .belief_engine import (
+    entropy,
+    information_gain,
+    most_likely_cause,
+    posterior_after_observation,
+)
+from .simulator import (
+    ACTION_COSTS,
+    C_FP,
+    C_FN,
+    Cause,
+    DERIVED_DECISION_THRESHOLD,
+    HIGH_CONSEQUENCE_COST,
+    HUMAN_REVIEW_COST,
+    Action,
+)
 
 
 @dataclass
@@ -20,8 +34,10 @@ CAUSE_RESPONSES = {
     Cause.OTHER: "human_escalation",
 }
 
-P2_THRESHOLD = 0.70
-P3_THRESHOLD = P2_THRESHOLD
+# Derived from the simulation's consequence costs:
+# p* = C_FP / (C_FP + C_FN) = 8 / (8 + 9) = 47.06%.
+P2_THRESHOLD = DERIVED_DECISION_THRESHOLD
+P3_THRESHOLD = DERIVED_DECISION_THRESHOLD
 
 P2_ACTION_ORDER = [
     Action.RERUN,
@@ -49,8 +65,57 @@ def _terminal(cause, confidence):
     }
 
 
+def _terminal_loss(beliefs, predicted):
+    """Expected consequence of committing to one terminal diagnosis."""
+    total = 0.0
+    for true_cause, probability in beliefs.items():
+        if predicted == Cause.FLAKY_TEST:
+            consequence = 0 if true_cause == Cause.FLAKY_TEST else (
+                HIGH_CONSEQUENCE_COST if true_cause == Cause.OTHER else HUMAN_REVIEW_COST
+            )
+        elif predicted == Cause.OTHER:
+            consequence = HIGH_CONSEQUENCE_COST
+        else:
+            consequence = HUMAN_REVIEW_COST
+        total += probability * consequence
+    return total
+
+
+def _best_terminal_loss(beliefs):
+    choices = {cause: _terminal_loss(beliefs, cause) for cause in Cause}
+    best = min(choices, key=choices.get)
+    return choices[best], best
+
+
+def expected_decision_value(beliefs, action):
+    """Expected reduction in terminal consequence from one more check.
+
+    This is decision value, not entropy reduction. It is zero when no possible
+    observation changes the best terminal decision.
+    """
+    current_loss, _ = _best_terminal_loss(beliefs)
+    p_positive = sum(
+        beliefs[cause]
+        * __import__("src.simulator", fromlist=["LIKELIHOODS"]).LIKELIHOODS[action][cause]
+        for cause in Cause
+    )
+    positive_beliefs = posterior_after_observation(beliefs, action, True)
+    negative_beliefs = posterior_after_observation(beliefs, action, False)
+    expected_after = (
+        p_positive * _best_terminal_loss(positive_beliefs)[0]
+        + (1 - p_positive) * _best_terminal_loss(negative_beliefs)[0]
+    )
+    return current_loss - expected_after
+
+
+def p0_decision(state: PolicyState):
+    """Trivial baseline: no evidence, always choose the modal prior cause."""
+    cause = max(state.beliefs, key=state.beliefs.get)
+    return _terminal(cause, state.beliefs[cause])
+
+
 def p2_decision(state: PolicyState, threshold=None):
-    """Evidence-driven policy with an explicit, configurable threshold."""
+    """Threshold policy using the derived consequence threshold."""
     threshold = P2_THRESHOLD if threshold is None else threshold
     cause = most_likely_cause(state.beliefs)
     confidence = state.beliefs[cause]
@@ -67,7 +132,7 @@ def p2_decision(state: PolicyState, threshold=None):
 
 
 def p3_decision(state: PolicyState, threshold=None):
-    """Adaptive policy: maximize expected information gain per unit cost."""
+    """Adaptive policy: EIG/cost ranking plus decision-value stopping."""
     threshold = P3_THRESHOLD if threshold is None else threshold
     cause = most_likely_cause(state.beliefs)
     confidence = state.beliefs[cause]
@@ -79,9 +144,29 @@ def p3_decision(state: PolicyState, threshold=None):
     if not candidates:
         return _terminal(cause, confidence)
 
-    scores = {a: information_gain(state.beliefs, a) / ACTION_COSTS[a]
-              for a in candidates}
-    best_action = max(scores, key=scores.get)
-    return {"type": "diagnostic", "action": best_action,
-            "score": scores[best_action], "cause": cause,
-            "confidence": confidence, "scores": scores}
+    eig_scores = {
+        a: information_gain(state.beliefs, a) / ACTION_COSTS[a]
+        for a in candidates
+    }
+    value_scores = {
+        a: expected_decision_value(state.beliefs, a)
+        for a in candidates
+    }
+
+    # Information gain chooses the candidate order; decision value is the
+    # stop gate. If no remaining check can recover more consequence value than
+    # it costs, stop rather than asking merely to reduce entropy.
+    best_action = max(eig_scores, key=eig_scores.get)
+    if value_scores[best_action] <= ACTION_COSTS[best_action]:
+        return _terminal(cause, confidence)
+
+    return {
+        "type": "diagnostic",
+        "action": best_action,
+        "score": eig_scores[best_action],
+        "decision_value": value_scores[best_action],
+        "cause": cause,
+        "confidence": confidence,
+        "scores": eig_scores,
+        "decision_values": value_scores,
+    }
