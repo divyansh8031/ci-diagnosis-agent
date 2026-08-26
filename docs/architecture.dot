@@ -1,23 +1,53 @@
 digraph CIDiagnosisAgent {
-  rankdir=TB;
-  node [shape=box];
+  rankdir=LR;
+  graph [pad="0.2", nodesep="0.35", ranksep="0.6"];
+  node [shape=box, style="rounded"];
+  edge [fontsize=10];
 
-  CI [label="CI failure\nlogs + test + commit"];
-  Evidence [label="Evidence store\nsource + observation + audit trail"];
-  Belief [label="Belief state\ncompeting hypotheses"];
-  Action [label="Select diagnostic action"];
-  Feedback [label="Tool feedback\nPASS/FAIL, diff, health, DB, history"];
-  Stop [shape=diamond, label="Stop rule /\ncommit threshold?"];
-  Human [label="Human review / escalation"];
-  Response [label="Cause-specific recommendation"];
+  CI [label="CI Failure\nlogs + test + commit"];
+  Evidence [label="Evidence Store\nsource + observation + audit trail"];
+  Belief [label="Belief State P(H)\ncompeting hidden causes"];
+
+  subgraph cluster_policy {
+    label="Policy Layer";
+    style="rounded";
+    P0 [label="P0\nFixed Sequence"];
+    P2 [label="P2\nPosterior Threshold"];
+    P3 [label="P3\nEIG / Cost"];
+    Entropy [label="Entropy H(P)\nExpected Information Gain"];
+  }
+
+  Selector [label="Action Selector"];
+  Actions [label="Diagnostic Actions\nRerun (1)\nSearch History (1)\nCheck Dependency (1)\nLocal Reproduction (2)\nInspect Code (2)\nCheck DB/State (2)"];
+  Executor [label="Executor / Simulator\nrun selected action"];
+  Feedback [label="Observation\nPASS / FAIL / positive / negative"];
+  Update [label="Bayesian Update\nP(H|E)"];
+  Decision [shape=diamond, label="Commit threshold\nreached?"];
+  Response [label="Cause-specific Response\nrerun / wait / suggested fix"];
+  Human [label="Human Review / Escalation\nreview, intervention or unknown"];
+  Metrics [label="Evaluation Metrics\naccuracy + diagnostic cost\ndecision cost + actions + escalation"];
 
   CI -> Evidence;
   Evidence -> Belief;
-  Belief -> Action;
-  Action -> Feedback;
+  Belief -> P0;
+  Belief -> P2;
+  Belief -> P3;
+  Belief -> Entropy;
+  Entropy -> P3 [label="EIG"];
+  P0 -> Selector;
+  P2 -> Selector [label="threshold"];
+  P3 -> Selector [label="EIG / cost"];
+  Selector -> Actions;
+  Actions -> Executor;
+  Executor -> Feedback;
   Feedback -> Evidence;
-  Belief -> Stop;
-  Stop -> Action [label="no"];
-  Stop -> Response [label="yes"];
+  Evidence -> Update;
+  Update -> Belief;
+  Belief -> Decision;
+  Decision -> Selector [label="no / continue"];
+  Decision -> Response [label="yes"];
   Response -> Human [label="when intervention/review required"];
+  Belief -> Metrics [style=dashed];
+  Actions -> Metrics [style=dashed];
+  Response -> Metrics [style=dashed];
 }
